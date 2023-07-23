@@ -44,17 +44,26 @@ public class ex_testcs extends AppCompatActivity {
     DataInputStream in;
     DataOutputStream os;
 
-//    private int cv_values[256];
+    private int [] cvValues;
+    private boolean [] powerStates;
+    private String [] tracks;
 
     JmDNS jmdns;
+
+    static String TRACK_POWER_BOTH = "";
+    static String TRACK_POWER_MAIN = "MAIN";
+    static String TRACK_POWER_PROG = "PROG";
+    static String TRACK_POWER_JOIN = "JOIN";
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_server);
+
+        initValues();
+
         wmanager = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
-//        String ip =
-//                Formatter.formatIpAddress(wmanager.getConnectionInfo().getIpAddress());
         try {
             WifiManager wifi = (WifiManager) ex_testcs.this.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
             wifiinfo = wifi.getConnectionInfo();
@@ -195,9 +204,24 @@ public class ex_testcs extends AppCompatActivity {
                                         smessage.setText("<r 1234>");
                                         button_sent.callOnClick();
                                     } else if ((thisLine.charAt(1) == 'R') && (line.length() > 3) ) {   //CV read request
-                                        String cv = thisLine.substring(3, thisLine.length()-1);
-                                        smessage.setText("<r "+cv+" 255>");
+                                        int cv = Integer.valueOf(thisLine.substring(3, thisLine.length()-1));
+                                        smessage.setText("<r " + cv + " " + cvValues[cv] + ">");
                                         button_sent.callOnClick();
+                                    } else if ((thisLine.charAt(1) == 'W') && (line.length() > 3) ) {   //CV read request
+                                        String[] params = thisLine.substring(3, thisLine.length()-1).split(" ");
+                                        int cv = Integer.valueOf(params[0]);
+                                        int cvValue = Integer.valueOf(params[1]);
+                                        cvValues[cv] = cvValue;
+                                        smessage.setText("<r " + cv + " " + cvValues[cv] + ">");
+                                        button_sent.callOnClick();
+                                    } else if (thisLine.equals("<0>")) {
+                                        setPower(TRACK_POWER_BOTH, false);
+                                    } else if (thisLine.equals("<1>")) {
+                                        setPower(TRACK_POWER_BOTH, true);
+                                    } else if ( ((thisLine.charAt(1) == '0') || (thisLine.charAt(1) == '1'))
+                                            && (line.length() > 3) ) {   //CV read request
+                                        String[] params = thisLine.substring(1, thisLine.length()-1).split(" ");
+                                        setPower(params[1], (params[0].equals("0") ? false : true) );
                                     } else {
                                         Log.d("EX-TestCS", "serverThread: Unknown command: " + line);
                                     }
@@ -240,17 +264,42 @@ public class ex_testcs extends AppCompatActivity {
                 jmdns.registerService(serviceInfo);
                 Log.d("EX-TestCS", "ServiceRegistration: jmdns.registerService()");
 
-//                // Wait a bit
-//                Thread.sleep(120000);
-//
-//                // Unregister all services
-//                jmdns.unregisterAllServices();
-//                Log.d("EX-TestCS", "ServiceRegistration: jmdns.unregisterAllServices()");
-
             } catch (IOException e) {
                 Log.e("EX-TestCS", "ServiceRegistration: " + e.getMessage());
-//            } catch (InterruptedException e) {
-//                Log.e("EX-TestCS", "ServiceRegistration: " + e.getMessage());
+            }
+        }
+    }
+
+    void initValues() {
+        cvValues = new int[256];
+        for (int i=0; i<256; i++) {
+            cvValues[i] = 255;
+        }
+
+        powerStates = new boolean[8];
+        tracks = new String[8];
+        for (int i=0; i<8; i++) {
+            powerStates[i] = false;
+            tracks[i] = "OFF";
+        }
+        tracks[0] = "MAIN";
+        tracks[1] = "PROG";
+    }
+
+    void setPower(String track, boolean powerOn) {
+        if (track.equals("")) {  // all tracks
+            for (int i=0; i<8; i++) {
+                powerStates[i] = powerOn;
+            }
+            smessage.setText("<p" + (powerOn ? 1 : 0) + ">");
+            button_sent.callOnClick();
+        } else {
+            for (int i=0; i<8; i++) {
+                if (tracks[i].equals(track)) {
+                    powerStates[i] = powerOn;
+                    smessage.setText("<p" + (powerOn ? 1 : 0) + " " + track + ">");
+                    button_sent.callOnClick();
+                }
             }
         }
     }
