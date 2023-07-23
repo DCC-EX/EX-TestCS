@@ -44,7 +44,7 @@ public class ex_testcs extends AppCompatActivity {
     DataInputStream in;
     DataOutputStream os;
 
-    private ok, int cv_values[256];
+//    private int cv_values[256];
 
     JmDNS jmdns;
 
