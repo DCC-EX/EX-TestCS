@@ -22,6 +22,8 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.util.LinkedList;
+import java.util.Queue;
 
 import javax.jmdns.JmDNS;
 import javax.jmdns.ServiceInfo;
@@ -44,9 +46,10 @@ public class ex_testcs extends AppCompatActivity {
     DataInputStream in;
     DataOutputStream os;
 
-    private int [] cvValues;
-    private boolean [] powerStates;
-    private String [] tracks;
+    private int[] cvValues;
+    private boolean[] tracksPower;
+    private String[] tracksMode;
+    private int [] tracksAddress;
 
     JmDNS jmdns;
 
@@ -55,6 +58,13 @@ public class ex_testcs extends AppCompatActivity {
     static String TRACK_POWER_PROG = "PROG";
     static String TRACK_POWER_JOIN = "JOIN";
 
+    static String TRACK_MODE_MAIN = "MAIN";
+    static String TRACK_MODE_PROG = "PROG";
+    static String TRACK_MODE_DC = "DC";
+    static String TRACK_MODE_DCX = "DCX";
+    static String TRACK_MODE_OFF = "OFF";
+
+    Queue<String> queue = new LinkedList<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -85,8 +95,13 @@ public class ex_testcs extends AppCompatActivity {
         display_status = (TextView)
                 findViewById(R.id.display_status);
         display_status.setText("Server hosted on " + ip + ":" + serverport);
-        Thread serverThread = new Thread(new serverThread());
+
+        Thread serverThread = new Thread(new ServerThread());
         serverThread.start();
+
+        Thread outputQueueThread = new Thread(new OutputQueueThread());
+        outputQueueThread.start();
+
 
         button_sent = (Button) findViewById(R.id.button_sent);
         button_sent.setOnClickListener(new View.OnClickListener() {
@@ -130,9 +145,6 @@ public class ex_testcs extends AppCompatActivity {
         @Override
         public void run() {
             try {
-//                Socket client = serverSocket.accept();
-//                DataOutputStream os = new
-//                        DataOutputStream(client.getOutputStream());
                 str = smessage.getText().toString() + "\n";
                 msg = msg + "\n Server : " + str;
                 Log.d("EX-TestCS", "sentMessage: Sending message" + str);
@@ -143,9 +155,6 @@ public class ex_testcs extends AppCompatActivity {
                     }
                 });
                 os.writeBytes(str);
-//                os.flush();
-//                os.close();
-//                client.close();
                 smessage.setText("");
             } catch (IOException e) {
                 Log.e("EX-TestCS", "sentMessage: IOException:" + e.getMessage());
@@ -155,8 +164,40 @@ public class ex_testcs extends AppCompatActivity {
         }
     }
 
+    // ******************************************************************************************//
 
-    public class serverThread implements Runnable {
+    public class OutputQueueThread implements Runnable {
+        public void run() {
+            while (true) {
+                if ( (queue!=null) && (!queue.isEmpty()) && (os!=null) ) {
+                    try {
+                        str = queue.remove();
+                        msg = msg + "\n Server : " + str;
+                        Log.d("EX-TestCS", "OutputQueueThread: Sending message" + str);
+                        handler.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                chat.setText(msg);
+                            }
+                        });
+                        str = str + "\n";
+                        os.writeBytes(str);
+
+                        Thread.sleep(100);
+
+                    } catch (IOException e) {
+                        Log.e("EX-TestCS", "OutputQueueThread: IOException:" + e.getMessage());
+                    } catch (InterruptedException e) {
+                        Log.e("EX-TestCS", "OutputQueueThread: InterruptedException: " + e.getMessage());
+                    } catch (Exception e) {
+                        Log.e("EX-TestCS", "OutputQueueThread: Exception:" + e.getMessage());
+                    }
+                }
+            }
+        }
+    }
+
+    public class ServerThread implements Runnable {
         @Override
         public void run() {
 
@@ -181,7 +222,7 @@ public class ex_testcs extends AppCompatActivity {
                 Log.e("EX-TestCS", "serverThread: Exception:" + e.getMessage());
             }
 
-            while(true){
+            while (true) {
                 try {
                     line = null;
                     while ((line = in.readLine()) != null) {
@@ -189,47 +230,55 @@ public class ex_testcs extends AppCompatActivity {
                         msg = msg + "\n Client : " + line;
                         handler.post(new Runnable() {
                             String thisLine;
+
                             @Override
                             public void run() {
                                 Log.d("EX-TestCS", "runnable(): processing: " + line);
                                 chat.setText(msg);
                                 if (thisLine != null) {
                                     if (thisLine.equals("<s>")) {
-                                        smessage.setText("<iDCCEX v-4.2.54 / MEGA / STANDARD_MOTOR_SHIELD G-Devel-202305250828Z>");
-                                        button_sent.callOnClick();
+                                        queue.add("<iDCCEX v-4.2.54 / MEGA / STANDARD_MOTOR_SHIELD G-Devel-202305250828Z>");
                                     } else if (thisLine.equals("<#>")) {
-                                        smessage.setText("<#>");
-                                        button_sent.callOnClick();
+                                        queue.add("<#>");
                                     } else if (thisLine.equals("<R>")) {
-                                        smessage.setText("<r 1234>");
-                                        button_sent.callOnClick();
-                                    } else if ((thisLine.charAt(1) == 'R') && (line.length() > 3) ) {   //CV read request
-                                        int cv = Integer.valueOf(thisLine.substring(3, thisLine.length()-1));
-                                        smessage.setText("<r " + cv + " " + cvValues[cv] + ">");
-                                        button_sent.callOnClick();
-                                    } else if ((thisLine.charAt(1) == 'W') && (line.length() > 3) ) {   //CV read request
-                                        String[] params = thisLine.substring(3, thisLine.length()-1).split(" ");
+                                        queue.add("<r 1234>");
+                                    } else if ((thisLine.charAt(1) == 'R') && (line.length() > 3)) {   //CV read request
+                                        int cv = Integer.valueOf(thisLine.substring(3, thisLine.length() - 1));
+                                        queue.add("<r " + cv + " " + cvValues[cv] + ">");
+                                    } else if ((thisLine.charAt(1) == 'W') && (line.length() > 3)) {   //CV read request
+                                        String[] params = thisLine.substring(3, thisLine.length() - 1).split(" ");
                                         int cv = Integer.valueOf(params[0]);
                                         int cvValue = Integer.valueOf(params[1]);
                                         cvValues[cv] = cvValue;
-                                        smessage.setText("<r " + cv + " " + cvValues[cv] + ">");
-                                        button_sent.callOnClick();
+                                        queue.add("<r " + cv + " " + cvValues[cv] + ">");
                                     } else if (thisLine.equals("<0>")) {
                                         setPower(TRACK_POWER_BOTH, false);
                                     } else if (thisLine.equals("<1>")) {
                                         setPower(TRACK_POWER_BOTH, true);
-                                    } else if ( ((thisLine.charAt(1) == '0') || (thisLine.charAt(1) == '1'))
-                                            && (line.length() > 3) ) {   //CV read request
-                                        String[] params = thisLine.substring(1, thisLine.length()-1).split(" ");
-                                        setPower(params[1], (params[0].equals("0") ? false : true) );
+                                    } else if (((thisLine.charAt(1) == '0') || (thisLine.charAt(1) == '1'))
+                                            && (line.length() > 3)) {
+                                        String[] params = thisLine.substring(1, thisLine.length() - 1).split(" ");
+                                        setPower(params[1], (params[0].equals("0") ? false : true));
+
+                                    } else if (thisLine.equals("<=>")) {   // get track modes
+                                        getTrackModes();
+
+                                    } else if ( (thisLine.charAt(1)=='=') && (line.length() > 3)) {   // set track mode
+                                        String[] params = thisLine.substring(3, thisLine.length() - 1).split(" ");
+                                        int trackNo = params[0].charAt(0) - 'A';
+                                        int trackAddress = -1;
+                                        if (params.length>2) trackAddress = Integer.parseInt(params[2]);
+                                        setTrackMode(trackNo, params[1], trackAddress);
+
                                     } else {
                                         Log.d("EX-TestCS", "serverThread: Unknown command: " + line);
                                     }
                                 }
                             }
+
                             public Runnable init(String line) {
-                                this.thisLine=line;
-                                return(this);
+                                this.thisLine = line;
+                                return (this);
                             }
                         }.init(line));
                     }
@@ -270,37 +319,66 @@ public class ex_testcs extends AppCompatActivity {
         }
     }
 
+    // ******************************************************************************************//
+
     void initValues() {
+        msg ="";
+
         cvValues = new int[256];
-        for (int i=0; i<256; i++) {
+        for (int i = 0; i < 256; i++) {
             cvValues[i] = 255;
         }
 
-        powerStates = new boolean[8];
-        tracks = new String[8];
-        for (int i=0; i<8; i++) {
-            powerStates[i] = false;
-            tracks[i] = "OFF";
+        tracksPower = new boolean[8];
+        tracksMode = new String[8];
+        tracksAddress = new int[8];
+        for (int i = 0; i < 8; i++) {
+            tracksPower[i] = false;
+            tracksMode[i] = TRACK_MODE_OFF;
+            tracksAddress[i] = -1;
         }
-        tracks[0] = "MAIN";
-        tracks[1] = "PROG";
+        tracksMode[0] = TRACK_POWER_MAIN;
+        tracksMode[1] = TRACK_POWER_PROG;
     }
+
+    // ******************************************************************************************//
 
     void setPower(String track, boolean powerOn) {
         if (track.equals("")) {  // all tracks
-            for (int i=0; i<8; i++) {
-                powerStates[i] = powerOn;
+            for (int i = 0; i < 8; i++) {
+                tracksPower[i] = powerOn;
             }
-            smessage.setText("<p" + (powerOn ? 1 : 0) + ">");
-            button_sent.callOnClick();
+            queue.add("<p" + (powerOn ? 1 : 0) + ">");
         } else {
-            for (int i=0; i<8; i++) {
-                if (tracks[i].equals(track)) {
-                    powerStates[i] = powerOn;
-                    smessage.setText("<p" + (powerOn ? 1 : 0) + " " + track + ">");
-                    button_sent.callOnClick();
+            for (int i = 0; i < 8; i++) {
+                if ((tracksMode[i].equals(track))
+                        || (((tracksMode[i].equals("MAIN")) || ((tracksMode[i].equals("PROG")) && (track.equals("JOIN")))))) {
+                    tracksPower[i] = powerOn;
+                    queue.add("<p" + (powerOn ? 1 : 0) + " " + track + ">");
                 }
             }
+        }
+    }
+
+    void getTrackModes() {
+        String msg;
+        for (int i = 0; i < 8; i++) {
+            char trackLetter = (char) ('A' + i);
+            if ((tracksMode[i].equals(TRACK_MODE_DC)) || tracksMode[i].equals(TRACK_MODE_DCX)) {
+                msg = "<= " + trackLetter + " " + tracksMode[i] + " " + tracksAddress[i] + ">";
+            } else {
+                msg = "<= " + trackLetter + " " + tracksMode[i] + ">";
+            }
+            queue.add(msg);
+        }
+    }
+
+    void setTrackMode(int track, String trackMode, int address) {
+        tracksMode[track] = trackMode;
+        if ( (trackMode.equals(TRACK_MODE_DC)) || trackMode.equals(TRACK_MODE_DCX) ) {
+            tracksAddress[track] = address;
+        } else {
+            tracksAddress[track] = -1;
         }
     }
 }
