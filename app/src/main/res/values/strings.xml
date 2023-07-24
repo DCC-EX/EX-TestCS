@@ -6,6 +6,17 @@
     <!-- Menus -->
     <string name="menu_item_preferences">Preferences</string>
     <string name="menu_item_reopen_connections">Re-start connections</string>
+    <string name="menu_item_exit">Exit</string>
+
+    <!-- Dialogs -->
+
+    <string name="dialog_exit_text">Exit EX-TestCS?</string>
+    <string name="dialog_exit_title">Exit</string>
+
+    <string name="yes">Yes</string>
+    <string name="no">No</string>
+    <string name="ok">"OK"</string>
+    <string name="cancel">"Cancel"</string>
 
     <!-- preference summaries and titles -->
     <string name="pref_preferences_summary">Preferences for EX-TestCS</string>

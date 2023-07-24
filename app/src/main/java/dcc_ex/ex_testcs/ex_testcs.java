@@ -1,6 +1,9 @@
 package dcc_ex.ex_testcs;
 
+import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 
 import androidx.activity.result.ActivityResult;
@@ -14,10 +17,12 @@ import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.util.Log;
+import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
@@ -98,6 +103,7 @@ public class ex_testcs extends AppCompatActivity {
     boolean [] randomLocoDir = {true, true, true, true};
     boolean [] randomLocoAction = {true, true, true, true};
 
+    boolean exitConfirmed = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -185,6 +191,9 @@ public class ex_testcs extends AppCompatActivity {
                 in = new Intent().setClass(this, settings_activity.class);
                 mLauncher.launch(in);
                 return true;
+            case R.id.exit_menu_item:
+                checkExit(this);
+                return true;
             default:
                 return super.onOptionsItemSelected(item);
         }
@@ -199,6 +208,53 @@ public class ex_testcs extends AppCompatActivity {
                 getSharedPreferences();
             }
         });
+
+    //Handle pressing of the back button to end this activity
+    @Override
+    public boolean onKeyDown(int key, KeyEvent event) {
+        if (key == KeyEvent.KEYCODE_BACK) {
+            checkExit(this);
+            return (true);
+        }
+        return (super.onKeyDown(key, event));
+    }
+
+    // prompt for Exit
+    public void checkExit(final Activity activity) {
+        final AlertDialog.Builder b = new AlertDialog.Builder(activity);
+        b.setIcon(android.R.drawable.ic_dialog_alert);
+        b.setTitle(R.string.dialog_exit_title);
+        b.setMessage(R.string.dialog_exit_text);
+        b.setCancelable(true);
+        b.setPositiveButton(R.string.yes, new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface dialog, int id) {
+                exitConfirmed = true;
+                finishAffinity();
+            }
+        });
+        b.setNegativeButton(R.string.no, null);
+        AlertDialog alert = b.create();
+        alert.show();
+
+        // find positiveButton and negativeButton
+        Button positiveButton = alert.findViewById(android.R.id.button1);
+        Button negativeButton = alert.findViewById(android.R.id.button2);
+        // then get their parent ViewGroup
+        ViewGroup buttonPanelContainer = (ViewGroup) positiveButton.getParent();
+        int positiveButtonIndex = buttonPanelContainer.indexOfChild(positiveButton);
+        int negativeButtonIndex = buttonPanelContainer.indexOfChild(negativeButton);
+        if (positiveButtonIndex < negativeButtonIndex) {  // force 'No' 'Yes' order
+            // prepare exchange their index in ViewGroup
+            buttonPanelContainer.removeView(positiveButton);
+            buttonPanelContainer.removeView(negativeButton);
+            buttonPanelContainer.addView(negativeButton, positiveButtonIndex);
+            buttonPanelContainer.addView(positiveButton, negativeButtonIndex);
+        }
+    }
+
+    // ******************************************************************************************//
+    // ******************************************************************************************//
+    // ******************************************************************************************//
 
 
     void openConnections() {

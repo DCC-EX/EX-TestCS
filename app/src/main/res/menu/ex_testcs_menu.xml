@@ -13,4 +13,9 @@
         android:visible="true"
         />
 
+    <item android:id="@+id/exit_menu_item"
+        android:title="@string/menu_item_exit"
+        android:visible="true"
+        />
+
 </menu>
