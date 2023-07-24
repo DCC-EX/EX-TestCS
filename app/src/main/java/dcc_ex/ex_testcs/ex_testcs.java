@@ -557,6 +557,15 @@ public class ex_testcs extends AppCompatActivity {
         queue.add(msg);
     }
 
+    void setLocoSpeed(String locoStr, String speedStr, String dirStr) {
+        int loco = Integer.valueOf(locoStr);
+        int speed = Integer.valueOf(speedStr);
+        int dir = Integer.valueOf(dirStr);
+
+        String msg = "<l " + loco + " 1 " + getSpeedByteFromSpeed(speed, dir ) + " 0>";
+        queue.add(msg);
+    }
+
     void processIncomingMessage(String thisLine) {
         if (thisLine.equals("<s>")) {
             queue.add("<iDCCEX v-" + pref_dcc_ex_version
@@ -609,6 +618,13 @@ public class ex_testcs extends AppCompatActivity {
 
         } else if ( (thisLine.equals("<JG>")) || (thisLine.equals("<J G>")) ) {   // get track currents max
             getTracksCurrentMax();
+
+        } else if ( (thisLine.charAt(1)=='t') && (line.length() > 3)) {   // loco
+            String[] params = thisLine.substring(3, thisLine.length() - 1).split(" ");
+            if (params.length>1) { // set speed
+                setLocoSpeed(params[0], params[1], params[1]);
+            } else { //request update
+            }
 
         } else {
             Log.d("EX-TestCS", "serverThread: Unknown command: " + line);
