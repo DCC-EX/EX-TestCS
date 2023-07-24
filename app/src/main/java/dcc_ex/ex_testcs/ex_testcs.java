@@ -35,6 +35,7 @@ import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.LinkedList;
 import java.util.Queue;
+import java.util.Random;
 
 import javax.jmdns.JmDNS;
 import javax.jmdns.ServiceInfo;
@@ -43,7 +44,7 @@ public class ex_testcs extends AppCompatActivity {
     Button button_sent;
     EditText smessage;
     TextView chat, display_status;
-    String str, msg, line = "";
+    String str, msgHistory, line = "";
     int serverport = 2560;
     ServerSocket serverSocket;
     Socket client;
@@ -57,10 +58,13 @@ public class ex_testcs extends AppCompatActivity {
     DataInputStream in;
     DataOutputStream os;
 
+    boolean connectionOpen = false;
+
     private int[] cvValues;
     private boolean[] tracksPower;
     private String[] tracksMode;
     private int [] tracksAddress;
+    private int [] tracksCurrent;
 
     JmDNS jmdns;
 
@@ -83,8 +87,16 @@ public class ex_testcs extends AppCompatActivity {
     String pref_dcc_ex_version = "";
     String pref_dcc_ex_board = "";
     String pref_dcc_ex_motor_shield = "";
+    String pref_dcc_ex_current_max = "";
 
     String pref_loco_address = "";
+
+    Random rand = new Random();
+
+    int [] randomLocoAddress = {123, 234, 345, 456};
+    int [] randomLocoSpeed = {0, 0, 0, 0};
+    boolean [] randomLocoDir = {true, true, true, true};
+    boolean [] randomLocoAction = {true, true, true, true};
 
 
     @Override
@@ -124,6 +136,8 @@ public class ex_testcs extends AppCompatActivity {
         Thread outputQueueThread = new Thread(new OutputQueueThread());
         outputQueueThread.start();
 
+        Thread randomEventsThread = new Thread(new RandomEventsThread());
+        randomEventsThread.start();
 
         button_sent = (Button) findViewById(R.id.button_sent);
         button_sent.setOnClickListener(new View.OnClickListener() {
@@ -163,12 +177,13 @@ public class ex_testcs extends AppCompatActivity {
         // Handle all of the possible menu actions.
         Intent in;
         switch (item.getItemId()) {
+            case R.id.reopen_connections_menu_item:
+                closeConnections();
+                openConnections();
+                return true;
             case R.id.preferences_menu_item:
                 in = new Intent().setClass(this, settings_activity.class);
-//                startActivityForResult(in, 0);
                 mLauncher.launch(in);
-
-//                this.overridePendingTransition(this, R.anim.fade_in, R.anim.fade_out);
                 return true;
             default:
                 return super.onOptionsItemSelected(item);
@@ -186,19 +201,51 @@ public class ex_testcs extends AppCompatActivity {
         });
 
 
+    void openConnections() {
+        client = null;
+        try {
+            serverSocket = new ServerSocket();
+            serverSocket.setReuseAddress(true);
+            serverSocket.bind(new InetSocketAddress(2560));
+
+            client = serverSocket.accept();
+            // setup i/p streams
+            in = new DataInputStream(client.getInputStream());
+            os = new DataOutputStream(client.getOutputStream());
+
+            Log.d("EX-TestCS", "serverThread: Socket Open");
+
+            connectionOpen = true;
+
+        } catch (UnknownHostException e) {
+            Log.e("EX-TestCS", "serverThread: UnknownHostException: " + e.getMessage());
+        } catch (IOException e) {
+            Log.e("EX-TestCS", "serverThread: IOException: " + e.getMessage());
+        } catch (Exception e) {
+            Log.e("EX-TestCS", "serverThread: Exception:" + e.getMessage());
+        }
+    }
+
     void closeConnections() {
         try {
             in.close();
             os.close();
         } catch (Exception e) {
-            Log.e("EX-TestCS", "onDestroy: Exception:" + e.getMessage());
+            Log.e("EX-TestCS", "closeConnections: I/O Exception:" + e.getMessage());
         }
 
         try {
             client.close();
         } catch (Exception e) {
-            Log.e("EX-TestCS", "onDestroy: Exception:" + e.getMessage());
+            Log.e("EX-TestCS", "closeConnections: Client: Exception:" + e.getMessage());
         }
+
+        try {
+            serverSocket.close();
+        } catch (Exception e) {
+            Log.e("EX-TestCS", "closeConnections: Socket: Exception:" + e.getMessage());
+        }
+        connectionOpen = false;
     }
 
     class sentMessage implements Runnable {
@@ -206,12 +253,12 @@ public class ex_testcs extends AppCompatActivity {
         public void run() {
             try {
                 str = smessage.getText().toString() + "\n";
-                msg = msg + "\n Server : " + str;
+                msgHistory = msgHistory + "\n Server : " + str;
                 Log.d("EX-TestCS", "sentMessage: Sending message" + str);
                 handler.post(new Runnable() {
                     @Override
                     public void run() {
-                        chat.setText(msg);
+                        chat.setText(msgHistory);
                     }
                 });
                 os.writeBytes(str);
@@ -229,15 +276,15 @@ public class ex_testcs extends AppCompatActivity {
     public class OutputQueueThread implements Runnable {
         public void run() {
             while (true) {
-                if ( (queue!=null) && (!queue.isEmpty()) && (os!=null) ) {
+                if ( (connectionOpen) && (queue!=null) && (!queue.isEmpty()) && (os!=null) ) {
                     try {
                         str = queue.remove();
-                        msg = msg + "\n Server : " + str;
+                        msgHistory = msgHistory + "\n Server : " + str;
                         Log.d("EX-TestCS", "OutputQueueThread: Sending message" + str);
                         handler.post(new Runnable() {
                             @Override
                             public void run() {
-                                chat.setText(msg);
+                                chat.setText(msgHistory);
                             }
                         });
                         str = str + "\n";
@@ -257,68 +304,48 @@ public class ex_testcs extends AppCompatActivity {
         }
     }
 
-    void openConnection() {
-        client = null;
-        try {
-            serverSocket = new ServerSocket();
-            serverSocket.setReuseAddress(true);
-            serverSocket.bind(new InetSocketAddress(2560));
-
-            client = serverSocket.accept();
-            // setup i/p streams
-            in = new DataInputStream(client.getInputStream());
-            os = new DataOutputStream(client.getOutputStream());
-
-            Log.d("EX-TestCS", "serverThread: Socket Open");
-
-        } catch (UnknownHostException e) {
-            Log.e("EX-TestCS", "serverThread: UnknownHostException: " + e.getMessage());
-        } catch (IOException e) {
-            Log.e("EX-TestCS", "serverThread: IOException: " + e.getMessage());
-        } catch (Exception e) {
-            Log.e("EX-TestCS", "serverThread: Exception:" + e.getMessage());
-        }
-    }
-
     public class ServerThread implements Runnable {
         @Override
         public void run() {
-            openConnection();
 
             while (true) {
-                try {
-                    line = null;
-                    while ((line = in.readLine()) != null) {
-                        Log.d("EX-TestCS", "received: " + line);
-                        msg = msg + "\n Client : " + line;
-                        handler.post(new Runnable() {
-                            String thisLine;
+                if (!connectionOpen) {
+                    openConnections();
+                } else {
+                    try {
+                        line = null;
+                        while ((line = in.readLine()) != null) {
+                            Log.d("EX-TestCS", "received: " + line);
+                            msgHistory = msgHistory + "\n Client : " + line;
+                            handler.post(new Runnable() {
+                                String thisLine;
 
-                            @Override
-                            public void run() {
-                                Log.d("EX-TestCS", "runnable(): processing: " + line);
-                                chat.setText(msg);
-                                if (thisLine != null) {
-                                    processIncommingMessage(thisLine);
+                                @Override
+                                public void run() {
+                                    Log.d("EX-TestCS", "runnable(): processing: " + line);
+                                    chat.setText(msgHistory);
+                                    if (thisLine != null) {
+                                        processIncomingMessage(thisLine);
+                                    }
                                 }
-                            }
 
-                            public Runnable init(String line) {
-                                this.thisLine = line;
-                                return (this);
-                            }
-                        }.init(line));
+                                public Runnable init(String line) {
+                                    this.thisLine = line;
+                                    return (this);
+                                }
+                            }.init(line));
+                        }
+                        Thread.sleep(100);
+
+                    } catch (UnknownHostException e) {
+                        Log.e("EX-TestCS", "serverThread: UnknownHostException:" + e.getMessage());
+                    } catch (IOException e) {
+                        Log.e("EX-TestCS", "serverThread: IOException: " + e.getMessage());
+                    } catch (InterruptedException e) {
+                        Log.e("EX-TestCS", "serverThread: InterruptedException: " + e.getMessage());
+                    } catch (Exception e) {
+                        Log.e("EX-TestCS", "serverThread: Exception: " + e.getMessage());
                     }
-                    Thread.sleep(100);
-
-                } catch (UnknownHostException e) {
-                    Log.e("EX-TestCS", "serverThread: UnknownHostException:" + e.getMessage());
-                } catch (IOException e) {
-                    Log.e("EX-TestCS", "serverThread: IOException: " + e.getMessage());
-                } catch (InterruptedException e) {
-                    Log.e("EX-TestCS", "serverThread: InterruptedException: " + e.getMessage());
-                } catch (Exception e) {
-                    Log.e("EX-TestCS", "serverThread: Exception: " + e.getMessage());
                 }
             }
         }
@@ -349,7 +376,7 @@ public class ex_testcs extends AppCompatActivity {
     // ******************************************************************************************//
 
     void initValues() {
-        msg ="";
+        msgHistory = "";
 
         cvValues = new int[256];
         for (int i = 0; i < 256; i++) {
@@ -359,25 +386,102 @@ public class ex_testcs extends AppCompatActivity {
         tracksPower = new boolean[8];
         tracksMode = new String[8];
         tracksAddress = new int[8];
+        tracksCurrent = new int[8];
         for (int i = 0; i < 8; i++) {
             tracksPower[i] = false;
             tracksMode[i] = TRACK_MODE_OFF;
             tracksAddress[i] = -1;
+            tracksCurrent[i] = 0;
         }
         tracksMode[0] = TRACK_POWER_MAIN;
         tracksMode[1] = TRACK_POWER_PROG;
+
+        for (int i=0; i<randomLocoAddress.length; i++) {
+            randomLocoSpeed[i] = rand.nextInt(127);
+            randomLocoDir[i] = ((rand.nextInt(1)==1) ? true : false);
+        }
     }
 
     void getSharedPreferences() {
         prefs = PreferenceManager.getDefaultSharedPreferences(this);
-        pref_dcc_ex_version= prefs.getString("pref_dcc_ex_version", "@String/pref_dcc_ex_version_default");
-        pref_dcc_ex_board = prefs.getString("pref_dcc_ex_board", "@String/pref_dcc_ex_board_default");
-        pref_dcc_ex_motor_shield = prefs.getString("pref_dcc_ex_motor_shield", "@String/pref_dcc_ex_motor_shield_default");
+        pref_dcc_ex_version= prefs.getString("pref_dcc_ex_version", getResources().getString(R.string.pref_dcc_ex_version_default));
+        pref_dcc_ex_board = prefs.getString("pref_dcc_ex_board", getResources().getString(R.string.pref_dcc_ex_board_default));
+        pref_dcc_ex_motor_shield = prefs.getString("pref_dcc_ex_motor_shield", getResources().getString(R.string.pref_dcc_ex_motor_shield_default));
+        pref_dcc_ex_current_max = prefs.getString("pref_dcc_ex_current_max", getResources().getString(R.string.pref_dcc_ex_current_max_default));
 
-        pref_loco_address = prefs.getString("pref_loco_address", "@String/pref_loco_address_default");
+        pref_loco_address = prefs.getString("pref_loco_address", getResources().getString(R.string.pref_loco_address_default));
     }
 
     // ******************************************************************************************//
+
+    int getSpeedFromSpeedByte(int speedByte) {
+        int dir = -1;
+        int speed = speedByte;
+        if (speed >= 128) {
+            speed = speed - 128;
+            dir = 1;
+        }
+        if (speed>1) {
+            speed = speed - 1; // get round and idiotic design of the speed command
+        } else {
+            speed=0;
+        }
+        return speed * dir;
+    }
+
+    int getSpeedByteFromSpeed(int speed, int dir) {  // dir 0=reverse 1=forward
+        int speedByte = 0;
+        if (dir==0) { // reverse
+            speedByte = speed;
+        } else {
+            speedByte = speed + 128 + 1;
+        }
+        return speedByte;
+    }
+
+    public class RandomEventsThread implements Runnable {
+        String msg = "";
+        @Override
+        public void run() {
+            while (true) {
+                try {
+                    if (connectionOpen) {
+                        for (int i=0; i<randomLocoAddress.length; i++) {
+                            randomLocoSpeed[i] = randomLocoSpeed[i] + ( (randomLocoAction[i]) ? 5 : -5);
+
+                            if (randomLocoSpeed[i]>126) {
+                                randomLocoSpeed[i]=126;
+                                randomLocoAction[i] = !randomLocoAction[i];
+                            }
+
+                            if (randomLocoSpeed[i]<0) {
+                                randomLocoSpeed[i]=1;
+                                randomLocoDir[i] = !randomLocoDir[i];
+                                randomLocoAction[i] = !randomLocoAction[i];
+                            }
+                            msg = "<l " + randomLocoAddress[i] + " 1 " + getSpeedByteFromSpeed(randomLocoSpeed[i], (randomLocoDir[i] ? 1 : 0) ) + " 0>";
+                            queue.add(msg);
+                        }
+
+                    }
+                    Thread.sleep(5000);
+                } catch (InterruptedException e) {
+                    Log.e("EX-TestCS", "RandomEvents: InterruptedException: " + e.getMessage());
+                }
+            }
+        }
+    }
+
+    // ******************************************************************************************//
+
+    char getTrackLetter(int trackNo) {
+        return (char) ('A' + trackNo);
+    }
+
+    int getTrackNumber(char trackLetter) {
+        return (int) (trackLetter - 'A');
+    }
+
 
     void setPower(String track, boolean powerOn) {
         if (track.equals("")) {  // all tracks
@@ -399,11 +503,10 @@ public class ex_testcs extends AppCompatActivity {
     void getTrackModes() {
         String msg;
         for (int i = 0; i < 8; i++) {
-            char trackLetter = (char) ('A' + i);
             if ((tracksMode[i].equals(TRACK_MODE_DC)) || tracksMode[i].equals(TRACK_MODE_DCX)) {
-                msg = "<= " + trackLetter + " " + tracksMode[i] + " " + tracksAddress[i] + ">";
+                msg = "<= " + getTrackLetter(i) + " " + tracksMode[i] + " " + tracksAddress[i] + ">";
             } else {
-                msg = "<= " + trackLetter + " " + tracksMode[i] + ">";
+                msg = "<= " + getTrackLetter(i) + " " + tracksMode[i] + ">";
             }
             queue.add(msg);
         }
@@ -416,31 +519,73 @@ public class ex_testcs extends AppCompatActivity {
         } else {
             tracksAddress[track] = -1;
         }
+
+        boolean foundProg = false;
+        for (int i = 0; i < 8; i++) {
+            if (tracksMode[i].equals(TRACK_MODE_PROG)) {
+                if (!foundProg) {
+                    foundProg = true;
+                } else {  // can only have one
+                    tracksMode[i] = TRACK_MODE_OFF;
+                }
+            }
+        }
+
     }
 
-    void processIncommingMessage(String thisLine) {
+    void getTracksCurrent() {
+        String msg = "<jI ";
+        for (int i = 0; i < 8; i++) {
+            if (!tracksMode[i].equals(TRACK_MODE_OFF)) {
+                msg = msg + rand.nextInt(Integer.valueOf(pref_dcc_ex_current_max));
+            } else {
+                msg = msg + "0";
+            }
+            if (i<7) msg=msg+" ";
+        }
+        msg =msg + ">";
+        queue.add(msg);
+    }
+
+    void getTracksCurrentMax() {
+        String msg = "<jG ";
+        for (int i = 0; i < 8; i++) {
+            msg =msg + pref_dcc_ex_current_max;
+            if (i<7) msg=msg+" ";
+        }
+        msg =msg + ">";
+        queue.add(msg);
+    }
+
+    void processIncomingMessage(String thisLine) {
         if (thisLine.equals("<s>")) {
             queue.add("<iDCCEX v-" + pref_dcc_ex_version
                     + " / " + pref_dcc_ex_board
                     + " / " + pref_dcc_ex_motor_shield + ">");
+
         } else if (thisLine.equals("<#>")) { // heartbeat
             queue.add("<#>");
+
         } else if (thisLine.equals("<R>")) { // read loco address
             queue.add("<r " + pref_loco_address + ">");
+
         } else if ((thisLine.charAt(1) == 'R') && (line.length() > 3)) {   //CV read request
             int cv = Integer.valueOf(thisLine.substring(3, thisLine.length() - 1));
             queue.add("<r " + cv + " " + cvValues[cv] + ">");
+
         } else if ((thisLine.charAt(1) == 'W') && (line.length() > 3)) {   //CV read request
             String[] params = thisLine.substring(3, thisLine.length() - 1).split(" ");
             int cv = Integer.valueOf(params[0]);
             int cvValue = Integer.valueOf(params[1]);
             cvValues[cv] = cvValue;
             queue.add("<r " + cv + " " + cvValues[cv] + ">");
-        } else if (thisLine.equals("<0>")) {
+
+        } else if (thisLine.equals("<0>")) { // power
             setPower(TRACK_POWER_BOTH, false);
-        } else if (thisLine.equals("<1>")) {
+        } else if (thisLine.equals("<1>")) { // power
             setPower(TRACK_POWER_BOTH, true);
-        } else if (((thisLine.charAt(1) == '0') || (thisLine.charAt(1) == '1'))
+
+        } else if (((thisLine.charAt(1) == '0') || (thisLine.charAt(1) == '1')) // power
                 && (line.length() > 3)) {
             String[] params = thisLine.substring(1, thisLine.length() - 1).split(" ");
             setPower(params[1], (params[0].equals("0") ? false : true));
@@ -454,6 +599,16 @@ public class ex_testcs extends AppCompatActivity {
             int trackAddress = -1;
             if (params.length>2) trackAddress = Integer.parseInt(params[2]);
             setTrackMode(trackNo, params[1], trackAddress);
+
+        } else if (thisLine.equals("<U DISCONNECT>")) {   // get track modes
+            closeConnections();
+            openConnections();
+
+        } else if ( (thisLine.equals("<JI>")) || (thisLine.equals("<J I>")) ) {   // get track currents
+            getTracksCurrent();
+
+        } else if ( (thisLine.equals("<JG>")) || (thisLine.equals("<J G>")) ) {   // get track currents max
+            getTracksCurrentMax();
 
         } else {
             Log.d("EX-TestCS", "serverThread: Unknown command: " + line);

@@ -5,6 +5,7 @@
 
     <!-- Menus -->
     <string name="menu_item_preferences">Preferences</string>
+    <string name="menu_item_reopen_connections">Re-start connections</string>
 
     <!-- preference summaries and titles -->
     <string name="pref_preferences_summary">Preferences for EX-TestCS</string>
@@ -18,6 +19,9 @@
     <string name="pref_dcc_ex_motor_shield_summary">Motor shield that will be reported when connected</string>
     <string name="pref_dcc_ex_motor_shield_title">DCC-EX motor shield</string>
 
+    <string name="pref_dcc_ex_current_max_summary">Maximum current that will be reported when connected</string>
+    <string name="pref_dcc_ex_current_max_title">DCC-EX Current max</string>
+
     <string name="pref_loco_address_summary">Loco DCC address will be reported when connected</string>
     <string name="pref_loco_address_title">Loco DCC address</string>
 
@@ -25,6 +29,7 @@
     <string name="pref_dcc_ex_version_default">4.2.54</string>
     <string name="pref_dcc_ex_board_default">MEGA</string>
     <string name="pref_dcc_ex_motor_shield_default">STANDARD_MOTOR_SHIELD</string>
+    <string name="pref_dcc_ex_current_max_default">1472</string>
 
     <string name="pref_loco_address_default">1234</string>
 

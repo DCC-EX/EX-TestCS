@@ -29,6 +29,16 @@
         />
 
     <EditTextPreference
+        android:key="pref_dcc_ex_current_max"
+        android:defaultValue="@string/pref_dcc_ex_current_max_default"
+        android:summary="@string/pref_dcc_ex_current_max_summary"
+        android:title="@string/pref_dcc_ex_current_max_title"
+        android:inputType="number"
+        android:digits="0123456789"
+        android:maxLength="5"
+        />
+
+    <EditTextPreference
         android:key="pref_loco_address"
         android:defaultValue="@string/pref_loco_address_default"
         android:summary="@string/pref_loco_address_summary"
