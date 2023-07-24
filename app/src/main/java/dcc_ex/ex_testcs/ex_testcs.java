@@ -1,11 +1,22 @@
 package dcc_ex.ex_testcs;
 
 import android.content.Context;
+import android.content.Intent;
+
+import androidx.activity.result.ActivityResult;
+import androidx.activity.result.ActivityResultCallback;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.preference.PreferenceManager;
+import android.content.SharedPreferences;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.util.Log;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
@@ -66,12 +77,21 @@ public class ex_testcs extends AppCompatActivity {
 
     Queue<String> queue = new LinkedList<>();
 
+    Menu tMenu;
+
+    SharedPreferences prefs;
+    String pref_dcc_ex_version = "";
+    String pref_dcc_ex_board = "";
+    String pref_dcc_ex_motor_shield = "";
+
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_server);
 
         initValues();
+        getSharedPreferences();
 
         wmanager = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
         try {
@@ -125,6 +145,44 @@ public class ex_testcs extends AppCompatActivity {
 
         super.onDestroy();
     }
+
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        MenuInflater inflater = getMenuInflater();
+        inflater.inflate(R.menu.ex_testcs_menu, menu);
+        tMenu = menu;
+
+        return  super.onCreateOptionsMenu(menu);
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        // Handle all of the possible menu actions.
+        Intent in;
+        switch (item.getItemId()) {
+            case R.id.preferences_menu_item:
+                in = new Intent().setClass(this, settings_activity.class);
+//                startActivityForResult(in, 0);
+                mLauncher.launch(in);
+
+//                this.overridePendingTransition(this, R.anim.fade_in, R.anim.fade_out);
+                return true;
+            default:
+                return super.onOptionsItemSelected(item);
+        }
+    }
+
+    ActivityResultLauncher<Intent> mLauncher = registerForActivityResult(
+        new ActivityResultContracts.StartActivityForResult(),
+        new ActivityResultCallback<ActivityResult>() {
+            @Override
+            public void onActivityResult(ActivityResult result) {
+                // Do your code from onActivityResult
+                getSharedPreferences();
+            }
+        });
+
 
     void closeConnections() {
         try {
@@ -237,7 +295,9 @@ public class ex_testcs extends AppCompatActivity {
                                 chat.setText(msg);
                                 if (thisLine != null) {
                                     if (thisLine.equals("<s>")) {
-                                        queue.add("<iDCCEX v-4.2.54 / MEGA / STANDARD_MOTOR_SHIELD G-Devel-202305250828Z>");
+                                        queue.add("<iDCCEX v-" + pref_dcc_ex_version
+                                                + " / " + pref_dcc_ex_board
+                                                + " / " + pref_dcc_ex_motor_shield + ">");
                                     } else if (thisLine.equals("<#>")) {
                                         queue.add("<#>");
                                     } else if (thisLine.equals("<R>")) {
@@ -339,6 +399,13 @@ public class ex_testcs extends AppCompatActivity {
         }
         tracksMode[0] = TRACK_POWER_MAIN;
         tracksMode[1] = TRACK_POWER_PROG;
+    }
+
+    void getSharedPreferences() {
+        prefs = PreferenceManager.getDefaultSharedPreferences(this);
+        pref_dcc_ex_version= prefs.getString("pref_dcc_ex_version", "@String/pref_dcc_ex_version_default");
+        pref_dcc_ex_board = prefs.getString("pref_dcc_ex_board", "@String/pref_dcc_ex_board_default");
+        pref_dcc_ex_motor_shield = prefs.getString("pref_dcc_ex_motor_shield", "@String/pref_dcc_ex_motor_shield_default");
     }
 
     // ******************************************************************************************//

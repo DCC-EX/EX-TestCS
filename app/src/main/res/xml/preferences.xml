@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:key="ex_testcs_preference"
+    android:summary="@string/pref_preferences_summary"
+    android:title="@string/activity_name_preferences" >
+
+    <EditTextPreference
+        android:key="pref_dcc_ex_version"
+        android:defaultValue="@string/pref_dcc_ex_version_default"
+        android:summary="@string/pref_dcc_ex_version_summary"
+        android:title="@string/pref_dcc_ex_version_title"
+        android:inputType="number"
+        android:digits="0123456789."
+        />
+
+    <EditTextPreference
+        android:key="pref_dcc_ex_board"
+        android:defaultValue="@string/pref_dcc_ex_board_default"
+        android:summary="@string/pref_dcc_ex_board_summary"
+        android:title="@string/pref_dcc_ex_board_title"
+        />
+
+    <EditTextPreference
+        android:key="pref_dcc_ex_motor_shield"
+        android:defaultValue="@string/pref_dcc_ex_motor_shield_default"
+        android:summary="@string/pref_dcc_ex_motor_shield_summary"
+        android:title="@string/pref_dcc_ex_motor_shield_title"
+        />
+
+</PreferenceScreen>
