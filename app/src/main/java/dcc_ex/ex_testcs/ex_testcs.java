@@ -84,6 +84,8 @@ public class ex_testcs extends AppCompatActivity {
     String pref_dcc_ex_board = "";
     String pref_dcc_ex_motor_shield = "";
 
+    String pref_loco_address = "";
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -255,30 +257,33 @@ public class ex_testcs extends AppCompatActivity {
         }
     }
 
+    void openConnection() {
+        client = null;
+        try {
+            serverSocket = new ServerSocket();
+            serverSocket.setReuseAddress(true);
+            serverSocket.bind(new InetSocketAddress(2560));
+
+            client = serverSocket.accept();
+            // setup i/p streams
+            in = new DataInputStream(client.getInputStream());
+            os = new DataOutputStream(client.getOutputStream());
+
+            Log.d("EX-TestCS", "serverThread: Socket Open");
+
+        } catch (UnknownHostException e) {
+            Log.e("EX-TestCS", "serverThread: UnknownHostException: " + e.getMessage());
+        } catch (IOException e) {
+            Log.e("EX-TestCS", "serverThread: IOException: " + e.getMessage());
+        } catch (Exception e) {
+            Log.e("EX-TestCS", "serverThread: Exception:" + e.getMessage());
+        }
+    }
+
     public class ServerThread implements Runnable {
         @Override
         public void run() {
-
-            client = null;
-            try {
-                serverSocket = new ServerSocket();
-                serverSocket.setReuseAddress(true);
-                serverSocket.bind(new InetSocketAddress(2560));
-
-                client = serverSocket.accept();
-                // setup i/p streams
-                in = new DataInputStream(client.getInputStream());
-                os = new DataOutputStream(client.getOutputStream());
-
-                Log.d("EX-TestCS", "serverThread: Socket Open");
-
-            } catch (UnknownHostException e) {
-                Log.e("EX-TestCS", "serverThread: UnknownHostException: " + e.getMessage());
-            } catch (IOException e) {
-                Log.e("EX-TestCS", "serverThread: IOException: " + e.getMessage());
-            } catch (Exception e) {
-                Log.e("EX-TestCS", "serverThread: Exception:" + e.getMessage());
-            }
+            openConnection();
 
             while (true) {
                 try {
@@ -294,45 +299,7 @@ public class ex_testcs extends AppCompatActivity {
                                 Log.d("EX-TestCS", "runnable(): processing: " + line);
                                 chat.setText(msg);
                                 if (thisLine != null) {
-                                    if (thisLine.equals("<s>")) {
-                                        queue.add("<iDCCEX v-" + pref_dcc_ex_version
-                                                + " / " + pref_dcc_ex_board
-                                                + " / " + pref_dcc_ex_motor_shield + ">");
-                                    } else if (thisLine.equals("<#>")) {
-                                        queue.add("<#>");
-                                    } else if (thisLine.equals("<R>")) {
-                                        queue.add("<r 1234>");
-                                    } else if ((thisLine.charAt(1) == 'R') && (line.length() > 3)) {   //CV read request
-                                        int cv = Integer.valueOf(thisLine.substring(3, thisLine.length() - 1));
-                                        queue.add("<r " + cv + " " + cvValues[cv] + ">");
-                                    } else if ((thisLine.charAt(1) == 'W') && (line.length() > 3)) {   //CV read request
-                                        String[] params = thisLine.substring(3, thisLine.length() - 1).split(" ");
-                                        int cv = Integer.valueOf(params[0]);
-                                        int cvValue = Integer.valueOf(params[1]);
-                                        cvValues[cv] = cvValue;
-                                        queue.add("<r " + cv + " " + cvValues[cv] + ">");
-                                    } else if (thisLine.equals("<0>")) {
-                                        setPower(TRACK_POWER_BOTH, false);
-                                    } else if (thisLine.equals("<1>")) {
-                                        setPower(TRACK_POWER_BOTH, true);
-                                    } else if (((thisLine.charAt(1) == '0') || (thisLine.charAt(1) == '1'))
-                                            && (line.length() > 3)) {
-                                        String[] params = thisLine.substring(1, thisLine.length() - 1).split(" ");
-                                        setPower(params[1], (params[0].equals("0") ? false : true));
-
-                                    } else if (thisLine.equals("<=>")) {   // get track modes
-                                        getTrackModes();
-
-                                    } else if ( (thisLine.charAt(1)=='=') && (line.length() > 3)) {   // set track mode
-                                        String[] params = thisLine.substring(3, thisLine.length() - 1).split(" ");
-                                        int trackNo = params[0].charAt(0) - 'A';
-                                        int trackAddress = -1;
-                                        if (params.length>2) trackAddress = Integer.parseInt(params[2]);
-                                        setTrackMode(trackNo, params[1], trackAddress);
-
-                                    } else {
-                                        Log.d("EX-TestCS", "serverThread: Unknown command: " + line);
-                                    }
+                                    processIncommingMessage(thisLine);
                                 }
                             }
 
@@ -406,6 +373,8 @@ public class ex_testcs extends AppCompatActivity {
         pref_dcc_ex_version= prefs.getString("pref_dcc_ex_version", "@String/pref_dcc_ex_version_default");
         pref_dcc_ex_board = prefs.getString("pref_dcc_ex_board", "@String/pref_dcc_ex_board_default");
         pref_dcc_ex_motor_shield = prefs.getString("pref_dcc_ex_motor_shield", "@String/pref_dcc_ex_motor_shield_default");
+
+        pref_loco_address = prefs.getString("pref_loco_address", "@String/pref_loco_address_default");
     }
 
     // ******************************************************************************************//
@@ -447,5 +416,48 @@ public class ex_testcs extends AppCompatActivity {
         } else {
             tracksAddress[track] = -1;
         }
+    }
+
+    void processIncommingMessage(String thisLine) {
+        if (thisLine.equals("<s>")) {
+            queue.add("<iDCCEX v-" + pref_dcc_ex_version
+                    + " / " + pref_dcc_ex_board
+                    + " / " + pref_dcc_ex_motor_shield + ">");
+        } else if (thisLine.equals("<#>")) { // heartbeat
+            queue.add("<#>");
+        } else if (thisLine.equals("<R>")) { // read loco address
+            queue.add("<r " + pref_loco_address + ">");
+        } else if ((thisLine.charAt(1) == 'R') && (line.length() > 3)) {   //CV read request
+            int cv = Integer.valueOf(thisLine.substring(3, thisLine.length() - 1));
+            queue.add("<r " + cv + " " + cvValues[cv] + ">");
+        } else if ((thisLine.charAt(1) == 'W') && (line.length() > 3)) {   //CV read request
+            String[] params = thisLine.substring(3, thisLine.length() - 1).split(" ");
+            int cv = Integer.valueOf(params[0]);
+            int cvValue = Integer.valueOf(params[1]);
+            cvValues[cv] = cvValue;
+            queue.add("<r " + cv + " " + cvValues[cv] + ">");
+        } else if (thisLine.equals("<0>")) {
+            setPower(TRACK_POWER_BOTH, false);
+        } else if (thisLine.equals("<1>")) {
+            setPower(TRACK_POWER_BOTH, true);
+        } else if (((thisLine.charAt(1) == '0') || (thisLine.charAt(1) == '1'))
+                && (line.length() > 3)) {
+            String[] params = thisLine.substring(1, thisLine.length() - 1).split(" ");
+            setPower(params[1], (params[0].equals("0") ? false : true));
+
+        } else if (thisLine.equals("<=>")) {   // get track modes
+            getTrackModes();
+
+        } else if ( (thisLine.charAt(1)=='=') && (line.length() > 3)) {   // set track mode
+            String[] params = thisLine.substring(3, thisLine.length() - 1).split(" ");
+            int trackNo = params[0].charAt(0) - 'A';
+            int trackAddress = -1;
+            if (params.length>2) trackAddress = Integer.parseInt(params[2]);
+            setTrackMode(trackNo, params[1], trackAddress);
+
+        } else {
+            Log.d("EX-TestCS", "serverThread: Unknown command: " + line);
+        }
+
     }
 }

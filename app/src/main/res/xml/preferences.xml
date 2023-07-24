@@ -28,4 +28,14 @@
         android:title="@string/pref_dcc_ex_motor_shield_title"
         />
 
+    <EditTextPreference
+        android:key="pref_loco_address"
+        android:defaultValue="@string/pref_loco_address_default"
+        android:summary="@string/pref_loco_address_summary"
+        android:title="@string/pref_loco_address_title"
+        android:inputType="number"
+        android:digits="0123456789"
+        android:maxLength="5"
+        />
+
 </PreferenceScreen>
