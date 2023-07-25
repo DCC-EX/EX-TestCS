@@ -4,9 +4,24 @@
     <string name="app_name">EX-TestCS</string>
 
     <!-- Menus -->
+
     <string name="menu_item_preferences">Preferences</string>
     <string name="menu_item_reopen_connections">Re-start connections</string>
     <string name="menu_item_exit">Exit</string>
+
+    <!-- Background service -->
+
+    <string name="background_service_started">Background service started</string>
+    <string name="background_service_stopped">Background service stopped</string>
+    <string name="background_service_label">Return to EX-TestCS</string>
+    <string name="background_service_connected">Background service connected</string>
+    <string name="background_service_disconnected">Background service disconnected</string>
+
+    <!-- UI -->
+    <string name="ui_server">TestCS</string>
+    <string name="ui_client">Client</string>
+    <string name="ui_send_button">Send</string>
+    <string name="ui_clear_button">Clear</string>
 
     <!-- Dialogs -->
 

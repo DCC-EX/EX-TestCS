@@ -2,6 +2,11 @@ package dcc_ex.ex_testcs;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.Notification;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.content.ComponentCallbacks2;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -11,11 +16,16 @@ import androidx.activity.result.ActivityResultCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.preference.PreferenceManager;
+
+import android.content.ServiceConnection;
 import android.content.SharedPreferences;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.IBinder;
+import android.text.method.ScrollingMovementMethod;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.Menu;
@@ -26,6 +36,7 @@ import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -46,10 +57,10 @@ import javax.jmdns.JmDNS;
 import javax.jmdns.ServiceInfo;
 
 public class ex_testcs extends AppCompatActivity {
-    Button button_sent;
+    Button button_send, button_clear;
     EditText smessage;
-    TextView chat, display_status;
-    String str, msgHistory, line = "";
+    TextView msgHistoryView, display_status;
+    String msg, msgHistory, line = "";
     int serverport = 2560;
     ServerSocket serverSocket;
     Socket client;
@@ -105,6 +116,14 @@ public class ex_testcs extends AppCompatActivity {
 
     boolean exitConfirmed = false;
 
+//    private boolean mShouldUnbind;
+//    private BackgroundService mBoundService;
+//    private ServiceConnection mConnection;
+
+    Intent backgroundServiceIntent;
+
+    static int NOTIFICATION_ID = 777;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -130,10 +149,11 @@ public class ex_testcs extends AppCompatActivity {
             Log.e("EX-TestCS", "onCreate - error getting IP addr: " + except.getMessage());
         }
 
-        smessage = (EditText) findViewById(R.id.smessage);
-        chat = (TextView) findViewById(R.id.chat);
-        display_status = (TextView)
-                findViewById(R.id.display_status);
+        smessage = findViewById(R.id.smessage);
+        msgHistoryView = findViewById(R.id.chat);
+        msgHistoryView.setMovementMethod(new ScrollingMovementMethod());
+
+        display_status = findViewById(R.id.display_status);
         display_status.setText("Server hosted on " + ip + ":" + serverport);
 
         Thread serverThread = new Thread(new ServerThread());
@@ -145,29 +165,65 @@ public class ex_testcs extends AppCompatActivity {
         Thread randomEventsThread = new Thread(new RandomEventsThread());
         randomEventsThread.start();
 
-        button_sent = (Button) findViewById(R.id.button_sent);
-        button_sent.setOnClickListener(new View.OnClickListener() {
+        button_send = findViewById(R.id.button_send);
+        button_send.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                Thread sentThread = new Thread(new sentMessage());
-                sentThread.start();
+                Thread sendThread = new Thread(new sendMessage());
+                sendThread.start();
             }
         });
 
+        button_clear = findViewById(R.id.button_clear);
+        button_clear.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                msgHistory = "";
+                msgHistoryView.setText(msgHistory);
+            }
+        });
+
+
         Thread jmdnsThread = new Thread(new ServiceRegistration());
         jmdnsThread.start();
+
+        // ************************
+
+//        mConnection = new ServiceConnection() {
+//            public void onServiceConnected(ComponentName className, IBinder service) {
+//                mBoundService = ((BackgroundService.LocalBinder)service).getService();
+//                Toast.makeText(ex_testcs.this, R.string.background_service_connected,
+//                        Toast.LENGTH_SHORT).show();
+//            }
+//
+//            public void onServiceDisconnected(ComponentName className) {
+//                mBoundService = null;
+//                Toast.makeText(ex_testcs.this, R.string.background_service_disconnected,
+//                        Toast.LENGTH_SHORT).show();
+//            }
+//        };
+//        startService(mBoundService);
+
+        backgroundServiceIntent = new Intent(ex_testcs.this, BackgroundService.class);
+        startService(backgroundServiceIntent);
+
+//        doBindService();
+
+        // ************************
     }
 
     @Override
     public void onDestroy() {
         closeConnections();
+//        doUnbindService();
+        stopService(backgroundServiceIntent);
+        removeNotification();
 
         jmdns.unregisterAllServices();
         Log.d("EX-TestCS", "onDestroy: jmdns.unregisterAllServices()");
 
         super.onDestroy();
     }
-
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -252,8 +308,78 @@ public class ex_testcs extends AppCompatActivity {
         }
     }
 
+    @Override
+    public void onTrimMemory(int level) {
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {   // if in background
+            showNotification();
+
+//            if (level >= ComponentCallbacks2.TRIM_MEMORY_MODERATE) { // time to kill app
+//            }
+        }
+        super.onTrimMemory(level);
+    }
+
     // ******************************************************************************************//
     // ******************************************************************************************//
+    // ******************************************************************************************//
+
+//    void doBindService() {
+//        Log.d("EX-TestCS", "doBindService");
+//        if (bindService(new Intent(ex_testcs.this, BackgroundService.class),
+//                mConnection, Context.BIND_AUTO_CREATE)) {
+//            mShouldUnbind = true;
+//        } else {
+//            Log.e("EX-TestCS", "doBindService: Error: The requested service doesn't " +
+//                    "exist, or this client isn't allowed access to it.");
+//        }
+//    }
+//
+//    void doUnbindService() {
+//        if (mShouldUnbind) {
+//            Log.d("EX-TestCS", "doUnbindService");
+//            // Release information about the service's state.
+//            unbindService(mConnection);
+//            mShouldUnbind = false;
+//        }
+//    }
+
+    private void showNotification() {
+        Log.d("EX-TestCS", "showNotification()");
+        NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+
+        // The PendingIntent to launch our activity if the user selects this notification
+        PendingIntent contentIntent = PendingIntent.getActivity(this, NOTIFICATION_ID,
+                this.getIntent(), PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+        Notification notification;
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            notification = new Notification.Builder(this, "ex_testcs")
+                    .setSmallIcon(R.drawable.ic_launcher_small)  // the status icon
+                    .setTicker(getText(R.string.background_service_started))  // the status text
+                    .setWhen(System.currentTimeMillis())  // the time stamp
+                    .setContentTitle(getText(R.string.background_service_label))  // the label of the entry
+                    .setContentText(getText(R.string.background_service_started))  // the contents of the entry
+                    .setContentIntent(contentIntent)  // The intent to send when the entry is clicked
+                    .setChannelId("ex_testcs_notification_channel")
+                    .build();
+        } else {
+            notification = new Notification.Builder(this)
+                    .setSmallIcon(R.drawable.ic_launcher_small)  // the status icon
+                    .setContentTitle(getText(R.string.background_service_label))  // the label of the entry
+                    .setContentText(getText(R.string.background_service_started))  // the contents of the entry
+                    .setContentIntent(contentIntent)  // The intent to send when the entry is clicked
+                    .build();
+        }
+        manager.notify(NOTIFICATION_ID, notification);
+    }
+
+    // Remove notification
+    private void removeNotification() {
+        NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        manager.cancel(NOTIFICATION_ID);
+    }
+
     // ******************************************************************************************//
 
 
@@ -304,25 +430,25 @@ public class ex_testcs extends AppCompatActivity {
         connectionOpen = false;
     }
 
-    class sentMessage implements Runnable {
+    class sendMessage implements Runnable {
         @Override
         public void run() {
             try {
-                str = smessage.getText().toString() + "\n";
-                msgHistory = msgHistory + "\n Server : " + str;
-                Log.d("EX-TestCS", "sentMessage: Sending message" + str);
+                msg = smessage.getText().toString() + "\n";
+                msgHistory = getResources().getString(R.string.ui_server) + " : " + msg + "\n" + msgHistory;
+                Log.d("EX-TestCS", "sendMessage: Sending message" + msg);
                 handler.post(new Runnable() {
                     @Override
                     public void run() {
-                        chat.setText(msgHistory);
+                        msgHistoryView.setText(msgHistory);
                     }
                 });
-                os.writeBytes(str);
+                os.writeBytes(msg);
                 smessage.setText("");
             } catch (IOException e) {
-                Log.e("EX-TestCS", "sentMessage: IOException:" + e.getMessage());
+                Log.e("EX-TestCS", "sendMessage: IOException:" + e.getMessage());
             } catch (Exception e) {
-                Log.e("EX-TestCS", "sentMessage: Exception:" + e.getMessage());
+                Log.e("EX-TestCS", "sendMessage: Exception:" + e.getMessage());
             }
         }
     }
@@ -334,17 +460,17 @@ public class ex_testcs extends AppCompatActivity {
             while (true) {
                 if ( (connectionOpen) && (queue!=null) && (!queue.isEmpty()) && (os!=null) ) {
                     try {
-                        str = queue.remove();
-                        msgHistory = msgHistory + "\n Server : " + str;
-                        Log.d("EX-TestCS", "OutputQueueThread: Sending message" + str);
+                        msg = queue.remove();
+                        msgHistory = getResources().getString(R.string.ui_server) + " : " + msg + "\n" + msgHistory;
+                        Log.d("EX-TestCS", "OutputQueueThread: Sending message" + msg);
                         handler.post(new Runnable() {
                             @Override
                             public void run() {
-                                chat.setText(msgHistory);
+                                msgHistoryView.setText(msgHistory);
                             }
                         });
-                        str = str + "\n";
-                        os.writeBytes(str);
+                        msg = msg + "\n";
+                        os.writeBytes(msg);
 
                         Thread.sleep(100);
 
@@ -372,14 +498,14 @@ public class ex_testcs extends AppCompatActivity {
                         line = null;
                         while ((line = in.readLine()) != null) {
                             Log.d("EX-TestCS", "received: " + line);
-                            msgHistory = msgHistory + "\n Client : " + line;
+                            msgHistory = getResources().getString(R.string.ui_client) + " : " + line + "\n" + msgHistory;
                             handler.post(new Runnable() {
                                 String thisLine;
 
                                 @Override
                                 public void run() {
                                     Log.d("EX-TestCS", "runnable(): processing: " + line);
-                                    chat.setText(msgHistory);
+                                    msgHistoryView.setText(msgHistory);
                                     if (thisLine != null) {
                                         processIncomingMessage(thisLine);
                                     }
@@ -454,7 +580,8 @@ public class ex_testcs extends AppCompatActivity {
 
         for (int i=0; i<randomLocoAddress.length; i++) {
             randomLocoSpeed[i] = rand.nextInt(127);
-            randomLocoDir[i] = ((rand.nextInt(1)==1) ? true : false);
+            randomLocoDir[i] = ((rand.nextInt(100)>50) ? true : false);
+            randomLocoAction[i] = ((rand.nextInt(100)>50) ? true : false);
         }
     }
 
@@ -504,6 +631,7 @@ public class ex_testcs extends AppCompatActivity {
                     if (connectionOpen) {
                         for (int i=0; i<randomLocoAddress.length; i++) {
                             randomLocoSpeed[i] = randomLocoSpeed[i] + ( (randomLocoAction[i]) ? 5 : -5);
+                            randomLocoSpeed[i] = randomLocoSpeed[i] + (rand.nextInt(20) * ( (randomLocoAction[i]) ? 1 : -1) );
 
                             if (randomLocoSpeed[i]>126) {
                                 randomLocoSpeed[i]=126;
