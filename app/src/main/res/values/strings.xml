@@ -17,9 +17,15 @@
     <string name="background_service_connected">Background service connected</string>
     <string name="background_service_disconnected">Background service disconnected</string>
 
+    <!-- Permissions -->
+
+    <string name="toast_permissions_storage">READ_EXTERNAL_STORAGE is needed to read myAutomation.h</string>
+
     <!-- UI -->
-    <string name="ui_server">TestCS</string>
-    <string name="ui_client">Client</string>
+
+    <string name="ui_server">---&gt;</string>
+    <string name="ui_client">&lt;---</string>
+    <string name="ui_processing">----</string>
     <string name="ui_send_button">Send</string>
     <string name="ui_clear_button">Clear</string>
 
@@ -50,6 +56,12 @@
 
     <string name="pref_loco_address_summary">Loco DCC address will be reported when connected</string>
     <string name="pref_loco_address_title">Loco DCC address</string>
+
+    <string name="pref_random_locos_summary">Show some random loco movements</string>
+    <string name="pref_random_locos_title">Random Locos</string>
+
+    <string name="pref_random_currents_summary">Show some random changes to the track current</string>
+    <string name="pref_random_currents_title">Random Track Current</string>
 
     <!-- preference default values -->
     <string name="pref_dcc_ex_version_default">4.2.54</string>

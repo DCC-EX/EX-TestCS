@@ -48,4 +48,18 @@
         android:maxLength="5"
         />
 
+    <CheckBoxPreference
+        android:key="pref_random_locos"
+        android:defaultValue="@bool/pref_random_locos_default"
+        android:summary="@string/pref_random_locos_summary"
+        android:title="@string/pref_random_locos_title"
+        />
+
+<!--    <CheckBoxPreference-->
+<!--        android:key="pref_random_currents"-->
+<!--        android:defaultValue="@bool/pref_random_currents_default"-->
+<!--        android:summary="@string/pref_random_currents_summary"-->
+<!--        android:title="@string/pref_random_currents_title"-->
+<!--        />-->
+
 </PreferenceScreen>

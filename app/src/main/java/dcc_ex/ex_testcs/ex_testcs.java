@@ -15,16 +15,19 @@ import androidx.activity.result.ActivityResult;
 import androidx.activity.result.ActivityResultCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.core.content.ContextCompat;
 import androidx.preference.PreferenceManager;
 
 import android.content.ServiceConnection;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
+import android.text.Html;
 import android.text.method.ScrollingMovementMethod;
 import android.util.Log;
 import android.view.KeyEvent;
@@ -49,7 +52,9 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.util.HashMap;
 import java.util.LinkedList;
+import java.util.Map;
 import java.util.Queue;
 import java.util.Random;
 
@@ -57,10 +62,13 @@ import javax.jmdns.JmDNS;
 import javax.jmdns.ServiceInfo;
 
 public class ex_testcs extends AppCompatActivity {
+    private ex_testcs mainapp = this;
+
     Button button_send, button_clear;
     EditText smessage;
     TextView msgHistoryView, display_status;
-    String msg, msgHistory, line = "";
+    String msg, line = "";
+    public String msgHistory = "";
     int serverport = 2560;
     ServerSocket serverSocket;
     Socket client;
@@ -81,6 +89,11 @@ public class ex_testcs extends AppCompatActivity {
     private String[] tracksMode;
     private int [] tracksAddress;
     private int [] tracksCurrent;
+
+    private HashMap<Integer,String> locosHashMap = new HashMap<Integer,String>();
+
+    public HashMap<Integer,String> rosterHashMap = new HashMap<Integer,String>();
+    public HashMap<Integer,String> servoHashMap = new HashMap<Integer,String>();
 
     JmDNS jmdns;
 
@@ -106,6 +119,8 @@ public class ex_testcs extends AppCompatActivity {
     String pref_dcc_ex_current_max = "";
 
     String pref_loco_address = "";
+    boolean pref_random_locos = true;
+    boolean pref_random_currents = true;
 
     Random rand = new Random();
 
@@ -122,6 +137,8 @@ public class ex_testcs extends AppCompatActivity {
 
     Intent backgroundServiceIntent;
 
+    ReadMyAutomationH readMyAutomationH;
+
     static int NOTIFICATION_ID = 777;
 
     @Override
@@ -131,6 +148,8 @@ public class ex_testcs extends AppCompatActivity {
 
         initValues();
         getSharedPreferences();
+
+        checkStoragePermission();
 
         wmanager = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
         try {
@@ -179,10 +198,17 @@ public class ex_testcs extends AppCompatActivity {
             @Override
             public void onClick(View v) {
                 msgHistory = "";
-                msgHistoryView.setText(msgHistory);
+                msgHistoryView.setText(Html.fromHtml(msgHistory));
             }
         });
 
+        readMyAutomationH = new ReadMyAutomationH();
+        try {
+            readMyAutomationH.readRoster(mainapp ,this.getApplicationContext());
+        } catch (IOException e) {
+            Log.e("EX-TestCS", "onCreate: Read Roster:" + e.getMessage());
+        }
+        msgHistoryView.setText(Html.fromHtml(msgHistory));
 
         Thread jmdnsThread = new Thread(new ServiceRegistration());
         jmdnsThread.start();
@@ -319,6 +345,36 @@ public class ex_testcs extends AppCompatActivity {
         super.onTrimMemory(level);
     }
 
+    void checkStoragePermission() {
+        if (ContextCompat.checkSelfPermission(
+                this.getApplicationContext(), android.Manifest.permission.READ_EXTERNAL_STORAGE) ==
+                PackageManager.PERMISSION_GRANTED) {
+            // You can use the API that requires the permission.
+//            performAction(...);
+//        } else if (shouldShowRequestPermissionRationale(...)) {
+//
+        } else {
+            requestPermissionLauncher.launch(
+                    android.Manifest.permission.READ_EXTERNAL_STORAGE);
+        }
+
+    }
+
+    private ActivityResultLauncher<String> requestPermissionLauncher =
+            registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
+                if (isGranted) {
+                    // Permission is granted. Continue the action or workflow in your
+                    // app.
+                } else {
+                    // Explain to the user that the feature is unavailable because the
+                    // feature requires a permission that the user has denied. At the
+                    // same time, respect the user's decision. Don't link to system
+                    // settings in an effort to convince the user to change their
+                    // decision.
+                    Toast.makeText(this, R.string.toast_permissions_storage,Toast.LENGTH_SHORT).show();
+                }
+            });
+
     // ******************************************************************************************//
     // ******************************************************************************************//
     // ******************************************************************************************//
@@ -434,17 +490,21 @@ public class ex_testcs extends AppCompatActivity {
         @Override
         public void run() {
             try {
-                msg = smessage.getText().toString() + "\n";
-                msgHistory = getResources().getString(R.string.ui_server) + " : " + msg + "\n" + msgHistory;
-                Log.d("EX-TestCS", "sendMessage: Sending message" + msg);
-                handler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        msgHistoryView.setText(msgHistory);
-                    }
-                });
-                os.writeBytes(msg);
-                smessage.setText("");
+                msg = smessage.getText().toString();
+                if (msg.length()>0) {
+                    msg = msg + "\n";
+//                    msgHistory = getResources().getString(R.string.ui_server) + " : " + msg + "\n" + msgHistory;
+                    msgHistory = "<strong><i>" + Html.escapeHtml(getResources().getString(R.string.ui_server) + " : " + msg) + "</i></strong><br/>" + msgHistory;
+                    Log.d("EX-TestCS", "sendMessage: Sending message" + msg);
+                    handler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            msgHistoryView.setText(Html.fromHtml(msgHistory));
+                        }
+                    });
+                    os.writeBytes(msg);
+                    smessage.setText("");
+                }
             } catch (IOException e) {
                 Log.e("EX-TestCS", "sendMessage: IOException:" + e.getMessage());
             } catch (Exception e) {
@@ -461,12 +521,14 @@ public class ex_testcs extends AppCompatActivity {
                 if ( (connectionOpen) && (queue!=null) && (!queue.isEmpty()) && (os!=null) ) {
                     try {
                         msg = queue.remove();
-                        msgHistory = getResources().getString(R.string.ui_server) + " : " + msg + "\n" + msgHistory;
+//                        msgHistory = getResources().getString(R.string.ui_server) + " : " + msg + "\n" + msgHistory;
+                        msgHistory = "<strong><i>" + Html.escapeHtml(getResources().getString(R.string.ui_server) + " : " + msg) + "</i></strong><br />" + msgHistory;
                         Log.d("EX-TestCS", "OutputQueueThread: Sending message" + msg);
                         handler.post(new Runnable() {
                             @Override
                             public void run() {
-                                msgHistoryView.setText(msgHistory);
+//                                msgHistoryView.setText(msgHistory);
+                                msgHistoryView.setText(Html.fromHtml(msgHistory));
                             }
                         });
                         msg = msg + "\n";
@@ -498,14 +560,16 @@ public class ex_testcs extends AppCompatActivity {
                         line = null;
                         while ((line = in.readLine()) != null) {
                             Log.d("EX-TestCS", "received: " + line);
-                            msgHistory = getResources().getString(R.string.ui_client) + " : " + line + "\n" + msgHistory;
+//                            msgHistory = getResources().getString(R.string.ui_client) + " : " + line + "\n" + msgHistory;
+                            msgHistory = Html.escapeHtml(getResources().getString(R.string.ui_client) + " : " + line) + "<br />" + msgHistory;
                             handler.post(new Runnable() {
                                 String thisLine;
 
                                 @Override
                                 public void run() {
                                     Log.d("EX-TestCS", "runnable(): processing: " + line);
-                                    msgHistoryView.setText(msgHistory);
+//                                    msgHistoryView.setText(msgHistory);
+                                    msgHistoryView.setText(Html.fromHtml(msgHistory));
                                     if (thisLine != null) {
                                         processIncomingMessage(thisLine);
                                     }
@@ -580,8 +644,8 @@ public class ex_testcs extends AppCompatActivity {
 
         for (int i=0; i<randomLocoAddress.length; i++) {
             randomLocoSpeed[i] = rand.nextInt(127);
-            randomLocoDir[i] = ((rand.nextInt(100)>50) ? true : false);
-            randomLocoAction[i] = ((rand.nextInt(100)>50) ? true : false);
+            randomLocoDir[i] = (rand.nextInt(100) > 50);
+            randomLocoAction[i] = (rand.nextInt(100) > 50);
         }
     }
 
@@ -593,6 +657,10 @@ public class ex_testcs extends AppCompatActivity {
         pref_dcc_ex_current_max = prefs.getString("pref_dcc_ex_current_max", getResources().getString(R.string.pref_dcc_ex_current_max_default));
 
         pref_loco_address = prefs.getString("pref_loco_address", getResources().getString(R.string.pref_loco_address_default));
+
+        pref_random_locos = prefs.getBoolean("pref_random_locos", getResources().getBoolean(R.bool.pref_random_locos_default));
+        pref_random_currents = prefs.getBoolean("pref_random_currents", getResources().getBoolean(R.bool.pref_random_currents_default));
+
     }
 
     // ******************************************************************************************//
@@ -613,7 +681,7 @@ public class ex_testcs extends AppCompatActivity {
     }
 
     int getSpeedByteFromSpeed(int speed, int dir) {  // dir 0=reverse 1=forward
-        int speedByte = 0;
+        int speedByte;
         if (dir==0) { // reverse
             speedByte = speed;
         } else {
@@ -629,22 +697,24 @@ public class ex_testcs extends AppCompatActivity {
             while (true) {
                 try {
                     if (connectionOpen) {
-                        for (int i=0; i<randomLocoAddress.length; i++) {
-                            randomLocoSpeed[i] = randomLocoSpeed[i] + ( (randomLocoAction[i]) ? 5 : -5);
-                            randomLocoSpeed[i] = randomLocoSpeed[i] + (rand.nextInt(20) * ( (randomLocoAction[i]) ? 1 : -1) );
+                        if (pref_random_locos) {
+                            for (int i = 0; i < randomLocoAddress.length; i++) {
+                                randomLocoSpeed[i] = randomLocoSpeed[i] + ((randomLocoAction[i]) ? 5 : -5);
+                                randomLocoSpeed[i] = randomLocoSpeed[i] + (rand.nextInt(20) * ((randomLocoAction[i]) ? 1 : -1));
 
-                            if (randomLocoSpeed[i]>126) {
-                                randomLocoSpeed[i]=126;
-                                randomLocoAction[i] = !randomLocoAction[i];
-                            }
+                                if (randomLocoSpeed[i] > 126) {
+                                    randomLocoSpeed[i] = 126;
+                                    randomLocoAction[i] = !randomLocoAction[i];
+                                }
 
-                            if (randomLocoSpeed[i]<0) {
-                                randomLocoSpeed[i]=1;
-                                randomLocoDir[i] = !randomLocoDir[i];
-                                randomLocoAction[i] = !randomLocoAction[i];
+                                if (randomLocoSpeed[i] < 0) {
+                                    randomLocoSpeed[i] = 1;
+                                    randomLocoDir[i] = !randomLocoDir[i];
+                                    randomLocoAction[i] = !randomLocoAction[i];
+                                }
+                                msg = "<l " + randomLocoAddress[i] + " 1 " + getSpeedByteFromSpeed(randomLocoSpeed[i], (randomLocoDir[i] ? 1 : 0)) + " 0>";
+                                queue.add(msg);
                             }
-                            msg = "<l " + randomLocoAddress[i] + " 1 " + getSpeedByteFromSpeed(randomLocoSpeed[i], (randomLocoDir[i] ? 1 : 0) ) + " 0>";
-                            queue.add(msg);
                         }
 
                     }
@@ -663,7 +733,7 @@ public class ex_testcs extends AppCompatActivity {
     }
 
     int getTrackNumber(char trackLetter) {
-        return (int) (trackLetter - 'A');
+        return (trackLetter - 'A');
     }
 
 
@@ -742,11 +812,96 @@ public class ex_testcs extends AppCompatActivity {
     }
 
     void setLocoSpeed(String locoStr, String speedStr, String dirStr) {
-        int loco = Integer.valueOf(locoStr);
-        int speed = Integer.valueOf(speedStr);
-        int dir = Integer.valueOf(dirStr);
+        rememberLoco(locoStr);
+        int locoAddress = Integer.parseInt(locoStr);
+        int speed = Integer.parseInt(speedStr);
+        int dir = Integer.parseInt(dirStr);
 
-        String msg = "<l " + loco + " 1 " + getSpeedByteFromSpeed(speed, dir ) + " 0>";
+        String locoValuesStr = locosHashMap.get(locoAddress);
+        String[] locoValues = locoValuesStr.split(" ");
+        String functionMapStr = locoValues[2];
+        locosHashMap.put(locoAddress, speedStr + " " + dirStr + " " + functionMapStr);
+
+        String msg = "<l " + locoAddress + " 1 " + getSpeedByteFromSpeed(speed, dir ) + " " + functionMapStr + ">";
+        queue.add(msg);
+
+    }
+
+    void getLocoSpeed(String locoStr) {
+        rememberLoco(locoStr);
+        int locoAddress = Integer.valueOf(locoStr);
+
+        String locoValuesStr = locosHashMap.get(locoAddress);
+        String[] locoValues = locoValuesStr.split(" ");
+        int speed = Integer.valueOf(locoValues[0]);
+        int dir = Integer.valueOf(locoValues[1]);
+
+        String msg = "<l " + locoAddress + " 1 " + getSpeedByteFromSpeed(speed, dir ) + " " + locoValues[2] + ">";
+        queue.add(msg);
+    }
+
+    // only do something if we have not seen the loco before
+    void rememberLoco(String locoStr) {
+        int locoAddress = Integer.valueOf(locoStr);
+        if(!locosHashMap.containsKey(locoAddress)) { // haven't seen it before
+            locosHashMap.put(locoAddress, "0 1 0");
+        }
+    }
+
+    void setLocoFunction(String locoStr, String functionStr, String functionStateStr) {
+        rememberLoco(locoStr);
+        int locoAddress = Integer.valueOf(locoStr);
+        int functionNumber = Integer.valueOf(functionStr);
+        int functionState = Integer.valueOf(functionStateStr);
+
+        String locoValuesStr = locosHashMap.get(locoAddress);
+        String[] locoValues = locoValuesStr.split(" ");
+        int functionMap = Integer.valueOf(locoValues[2]);
+        int currentFunctionState = bitExtracted(functionMap,1, functionNumber+1);
+        if (currentFunctionState != functionState) {
+            functionMap = toggleBit( functionMap,functionNumber+1);
+            locosHashMap.put(locoAddress, locoValues[0] + " " + locoValues[1]+ " " + functionMap);
+            getLocoSpeed(locoStr);
+        }
+    }
+
+    // Function to extract k bits from p position and returns the extracted value as integer
+    // from: https://www.geeksforgeeks.org/extract-k-bits-given-position-number/
+    public int bitExtracted(int number, int k, int p) {
+        return (((1 << k) - 1) & (number >> (p - 1)));
+    }
+
+    int toggleBit(int n, int k) {
+        return (n ^ (1 << (k - 1)));
+    }
+
+    void getRosterList() {
+        if (!rosterHashMap.isEmpty()) {
+            int count = 0;
+            int key;
+            String msg = "<jR ";
+            for (Map.Entry<Integer, String> entry : rosterHashMap.entrySet()) {
+                key =entry.getKey();
+                if (key>0) {
+                    if (count>0) msg=msg+" ";
+                    msg = msg + key;
+                    count++;
+                }
+            }
+            msg = msg + ">";
+            queue.add(msg);
+        }
+    }
+
+    void getRosterEntry(String locoStr) {
+        Log.d("EX-TestCS", "getRosterEntry: " + locoStr );
+        int locoAddress = Integer.valueOf(locoStr);
+        String rosterValuesStr = rosterHashMap.get(locoAddress);
+        String[] rosterValues = rosterValuesStr.split("«»");
+        String locoName = rosterValues[0];
+        String functionsStr ="";
+        if (rosterValues.length>1) functionsStr = rosterValues[1];
+        String msg = "<jR " + locoStr + " \"" + locoName +"\" \"" + functionsStr + "\">";
         queue.add(msg);
     }
 
@@ -779,7 +934,7 @@ public class ex_testcs extends AppCompatActivity {
             setPower(TRACK_POWER_BOTH, true);
 
         } else if (((thisLine.charAt(1) == '0') || (thisLine.charAt(1) == '1')) // power
-                && (line.length() > 3)) {
+                && (thisLine.length() > 3)) {
             String[] params = thisLine.substring(1, thisLine.length() - 1).split(" ");
             setPower(params[1], (params[0].equals("0") ? false : true));
 
@@ -808,7 +963,22 @@ public class ex_testcs extends AppCompatActivity {
             if (params.length>1) { // set speed
                 setLocoSpeed(params[0], params[1], params[1]);
             } else { //request update
+                getLocoSpeed(params[0]);
             }
+
+        } else if ( (thisLine.charAt(1)=='F') && (line.length() > 3)) {   // functions
+            String[] params = thisLine.substring(3, thisLine.length() - 1).split(" ");
+            setLocoFunction(params[0], params[1], params[2]);
+
+        } else if ( (thisLine.equals("<JR>")) || (thisLine.equals("<J R>")) ) {   // get roster list
+            getRosterList();
+
+        } else if ( (thisLine.length() > 4)
+            && ((thisLine.substring(0,3).equals("<JR")) || (thisLine.substring(0,5).equals("<J R"))) ) {   // get roster entry
+            int startRestOfLine = 5;
+            if (thisLine.substring(0,3).equals("<JR")) startRestOfLine = 4;
+            String locoAddressStr = thisLine.substring(startRestOfLine,thisLine.length()-1);
+            getRosterEntry(locoAddressStr);
 
         } else {
             Log.d("EX-TestCS", "serverThread: Unknown command: " + line);
