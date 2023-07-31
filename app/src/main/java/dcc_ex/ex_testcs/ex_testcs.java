@@ -61,6 +61,9 @@ import java.util.Random;
 import javax.jmdns.JmDNS;
 import javax.jmdns.ServiceInfo;
 
+import dcc_ex.ex_testcs.util.Loco;
+import dcc_ex.ex_testcs.util.Turnout;
+
 public class ex_testcs extends AppCompatActivity {
     private ex_testcs mainapp = this;
 
@@ -90,10 +93,11 @@ public class ex_testcs extends AppCompatActivity {
     private int [] tracksAddress;
     private int [] tracksCurrent;
 
-    private HashMap<Integer,String> locosHashMap = new HashMap<Integer,String>();
+//    private HashMap<Integer,String> locosHashMap = new HashMap<Integer,String>();
+    private HashMap<Integer,Loco> locosHashMap = new HashMap<Integer,Loco>();
 
-    public HashMap<Integer,String> rosterHashMap = new HashMap<Integer,String>();
-    public HashMap<Integer,String> servoHashMap = new HashMap<Integer,String>();
+    public HashMap<Integer, Loco> rosterHashMap = new HashMap<Integer,Loco>();
+    public HashMap<Integer, Turnout> turnoutsHashMap = new HashMap<Integer,Turnout>();
 
     JmDNS jmdns;
 
@@ -208,6 +212,11 @@ public class ex_testcs extends AppCompatActivity {
         } catch (IOException e) {
             Log.e("EX-TestCS", "onCreate: Read Roster:" + e.getMessage());
         }
+        try {
+            readMyAutomationH.readTurnouts(mainapp ,this.getApplicationContext());
+        } catch (IOException e) {
+            Log.e("EX-TestCS", "onCreate: Read Servos:" + e.getMessage());
+        }
         msgHistoryView.setText(Html.fromHtml(msgHistory));
 
         Thread jmdnsThread = new Thread(new ServiceRegistration());
@@ -215,25 +224,8 @@ public class ex_testcs extends AppCompatActivity {
 
         // ************************
 
-//        mConnection = new ServiceConnection() {
-//            public void onServiceConnected(ComponentName className, IBinder service) {
-//                mBoundService = ((BackgroundService.LocalBinder)service).getService();
-//                Toast.makeText(ex_testcs.this, R.string.background_service_connected,
-//                        Toast.LENGTH_SHORT).show();
-//            }
-//
-//            public void onServiceDisconnected(ComponentName className) {
-//                mBoundService = null;
-//                Toast.makeText(ex_testcs.this, R.string.background_service_disconnected,
-//                        Toast.LENGTH_SHORT).show();
-//            }
-//        };
-//        startService(mBoundService);
-
         backgroundServiceIntent = new Intent(ex_testcs.this, BackgroundService.class);
         startService(backgroundServiceIntent);
-
-//        doBindService();
 
         // ************************
     }
@@ -680,7 +672,7 @@ public class ex_testcs extends AppCompatActivity {
         return speed * dir;
     }
 
-    int getSpeedByteFromSpeed(int speed, int dir) {  // dir 0=reverse 1=forward
+    public int getSpeedByteFromSpeed(int speed, int dir) {  // dir 0=reverse 1=forward
         int speedByte;
         if (dir==0) { // reverse
             speedByte = speed;
@@ -816,27 +808,16 @@ public class ex_testcs extends AppCompatActivity {
         int locoAddress = Integer.parseInt(locoStr);
         int speed = Integer.parseInt(speedStr);
         int dir = Integer.parseInt(dirStr);
-
-        String locoValuesStr = locosHashMap.get(locoAddress);
-        String[] locoValues = locoValuesStr.split(" ");
-        String functionMapStr = locoValues[2];
-        locosHashMap.put(locoAddress, speedStr + " " + dirStr + " " + functionMapStr);
-
-        String msg = "<l " + locoAddress + " 1 " + getSpeedByteFromSpeed(speed, dir ) + " " + functionMapStr + ">";
+        Loco loco = locosHashMap.get(locoAddress);
+        String msg = loco.setSpeedAndDirection(speed,dir);
         queue.add(msg);
-
     }
 
     void getLocoSpeed(String locoStr) {
         rememberLoco(locoStr);
         int locoAddress = Integer.valueOf(locoStr);
-
-        String locoValuesStr = locosHashMap.get(locoAddress);
-        String[] locoValues = locoValuesStr.split(" ");
-        int speed = Integer.valueOf(locoValues[0]);
-        int dir = Integer.valueOf(locoValues[1]);
-
-        String msg = "<l " + locoAddress + " 1 " + getSpeedByteFromSpeed(speed, dir ) + " " + locoValues[2] + ">";
+        Loco loco = locosHashMap.get(locoAddress);
+        String msg = loco.getSpeed();
         queue.add(msg);
     }
 
@@ -844,7 +825,8 @@ public class ex_testcs extends AppCompatActivity {
     void rememberLoco(String locoStr) {
         int locoAddress = Integer.valueOf(locoStr);
         if(!locosHashMap.containsKey(locoAddress)) { // haven't seen it before
-            locosHashMap.put(locoAddress, "0 1 0");
+            Loco loco = new Loco(mainapp, locoAddress);
+            locosHashMap.put(locoAddress, loco);
         }
     }
 
@@ -853,26 +835,31 @@ public class ex_testcs extends AppCompatActivity {
         int locoAddress = Integer.valueOf(locoStr);
         int functionNumber = Integer.valueOf(functionStr);
         int functionState = Integer.valueOf(functionStateStr);
-
-        String locoValuesStr = locosHashMap.get(locoAddress);
-        String[] locoValues = locoValuesStr.split(" ");
-        int functionMap = Integer.valueOf(locoValues[2]);
-        int currentFunctionState = bitExtracted(functionMap,1, functionNumber+1);
-        if (currentFunctionState != functionState) {
-            functionMap = toggleBit( functionMap,functionNumber+1);
-            locosHashMap.put(locoAddress, locoValues[0] + " " + locoValues[1]+ " " + functionMap);
-            getLocoSpeed(locoStr);
-        }
+        Loco loco = locosHashMap.get(locoAddress);
+        String msg = loco.setFunctionState(functionNumber,functionState);
+        queue.add(msg);
     }
 
     // Function to extract k bits from p position and returns the extracted value as integer
     // from: https://www.geeksforgeeks.org/extract-k-bits-given-position-number/
-    public int bitExtracted(int number, int k, int p) {
-        return (((1 << k) - 1) & (number >> (p - 1)));
+    // public int bitExtracted(int number, int k, int p) {
+    //    return (((1 << k) - 1) & (number >> (p - 1)));
+    public int bitExtracted(int n, int pos) {
+       return (((1 << 1) - 1) & (n >> (pos - 1)));
     }
 
-    int toggleBit(int n, int k) {
-        return (n ^ (1 << (k - 1)));
+    public int toggleBit(int n, int pos) {
+        return (n ^ (1 << (pos - 1)));
+    }
+
+    public int setBit(int n, int pos, boolean set) { // true = set  false = unset
+        int rslt;
+        if (set) {
+            rslt = n | (1 << pos - 1);
+        } else {
+        rslt = n & ~(1 << pos - 1);
+       }
+        return rslt;
     }
 
     void getRosterList() {
@@ -880,7 +867,8 @@ public class ex_testcs extends AppCompatActivity {
             int count = 0;
             int key;
             String msg = "<jR ";
-            for (Map.Entry<Integer, String> entry : rosterHashMap.entrySet()) {
+//            for (Map.Entry<Integer, String> entry : rosterHashMap.entrySet()) {
+            for (Map.Entry<Integer, Loco> entry : rosterHashMap.entrySet()) {
                 key =entry.getKey();
                 if (key>0) {
                     if (count>0) msg=msg+" ";
@@ -893,15 +881,53 @@ public class ex_testcs extends AppCompatActivity {
         }
     }
 
+    void getTurnoutList() {
+        if (!turnoutsHashMap.isEmpty()) {
+            int count = 0;
+            int key;
+            String msg = "<jT ";
+            for (Map.Entry<Integer, Turnout> entry : turnoutsHashMap.entrySet()) {
+                key =entry.getKey();
+                if (count>0) msg=msg+" ";
+                msg = msg + key;
+                count++;
+            }
+            msg = msg + ">";
+            queue.add(msg);
+
+            for (Map.Entry<Integer, Turnout> entry : turnoutsHashMap.entrySet()) {
+                key =entry.getKey();
+                getTurnoutEntry(Integer.toString(key));
+            }
+        }
+    }
+
     void getRosterEntry(String locoStr) {
         Log.d("EX-TestCS", "getRosterEntry: " + locoStr );
         int locoAddress = Integer.valueOf(locoStr);
-        String rosterValuesStr = rosterHashMap.get(locoAddress);
-        String[] rosterValues = rosterValuesStr.split("«»");
-        String locoName = rosterValues[0];
-        String functionsStr ="";
-        if (rosterValues.length>1) functionsStr = rosterValues[1];
-        String msg = "<jR " + locoStr + " \"" + locoName +"\" \"" + functionsStr + "\">";
+        Loco loco = rosterHashMap.get(locoAddress);
+        String msg = loco.getLocoEntry();
+        queue.add(msg);
+    }
+
+    void getTurnoutEntry(String turnoutStr) {
+        Log.d("EX-TestCS", "getTurnoutEntry: " + turnoutStr );
+        int turnoutId = Integer.valueOf(turnoutStr);
+        Turnout turnout = turnoutsHashMap.get(turnoutId);
+        String msg = turnout.getTurnoutEntry();
+        queue.add(msg);
+    }
+
+    void setTurnout(String turnoutStr, String turnoutStateStr) {
+        Log.d("EX-TestCS", "setTurnout: " + turnoutStr + " : " + turnoutStateStr);
+        int turnoutId = Integer.valueOf(turnoutStr);
+        Turnout turnout = turnoutsHashMap.get(turnoutId);
+        String msg = "";
+        if ( (turnoutStateStr.equals(Turnout.STATE_THROWN)) || (turnoutStateStr.equals(Turnout.ACTION_THROW)) ) {
+            msg = turnout.throwTurnout();
+        } else {
+            msg = turnout.closeTurnout();
+        }
         queue.add(msg);
     }
 
@@ -961,7 +987,7 @@ public class ex_testcs extends AppCompatActivity {
         } else if ( (thisLine.charAt(1)=='t') && (line.length() > 3)) {   // loco
             String[] params = thisLine.substring(3, thisLine.length() - 1).split(" ");
             if (params.length>1) { // set speed
-                setLocoSpeed(params[0], params[1], params[1]);
+                setLocoSpeed(params[0], params[1], params[2]);
             } else { //request update
                 getLocoSpeed(params[0]);
             }
@@ -972,13 +998,24 @@ public class ex_testcs extends AppCompatActivity {
 
         } else if ( (thisLine.equals("<JR>")) || (thisLine.equals("<J R>")) ) {   // get roster list
             getRosterList();
-
         } else if ( (thisLine.length() > 4)
             && ((thisLine.substring(0,3).equals("<JR")) || (thisLine.substring(0,5).equals("<J R"))) ) {   // get roster entry
             int startRestOfLine = 5;
             if (thisLine.substring(0,3).equals("<JR")) startRestOfLine = 4;
             String locoAddressStr = thisLine.substring(startRestOfLine,thisLine.length()-1);
             getRosterEntry(locoAddressStr);
+
+        } else if ( (thisLine.equals("<JT>")) || (thisLine.equals("<J T>")) ) {   // get turnout list
+            getTurnoutList();
+        } else if ( (thisLine.length() > 4)
+                && ((thisLine.substring(0,3).equals("<JT")) || (thisLine.substring(0,5).equals("<J T"))) ) {   // get turnout entry
+            int startRestOfLine = 5;
+            if (thisLine.substring(0, 3).equals("<JT")) startRestOfLine = 4;
+            String turnoutIdStr = thisLine.substring(startRestOfLine, thisLine.length() - 1);
+            getTurnoutEntry(turnoutIdStr);
+        } else if ( (thisLine.length() > 3)  && (thisLine.substring(0,2).equals("<T")) )  {   // get turnout entry
+            String[] params = thisLine.substring(3, thisLine.length() - 1).split(" ");
+            setTurnout(params[0], params[1]);
 
         } else {
             Log.d("EX-TestCS", "serverThread: Unknown command: " + line);

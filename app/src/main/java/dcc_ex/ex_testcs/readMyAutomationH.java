@@ -10,6 +10,9 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 
+import dcc_ex.ex_testcs.util.Loco;
+import dcc_ex.ex_testcs.util.Turnout;
+
 
 public class ReadMyAutomationH {
 
@@ -30,20 +33,33 @@ public class ReadMyAutomationH {
                 BufferedReader list_reader = new BufferedReader(new FileReader(myAutomationHfile));
                 while (list_reader.ready()) {
                     String line = list_reader.readLine();
-                    if ( (line.length()>7) && (line.substring(0, 7).equals("ROSTER("))) {
-                        String locoAddressString = line.substring(7, line.indexOf(","));
-                        int locoAddress = Integer.parseInt(locoAddressString);
-                        String restOfLine = line.substring(line.indexOf(",")+1);
-                        String[] a = restOfLine.split("\",\"");
-                        String[] aa = a[0].split("\"");
-                        String[] ab = a[1].split("\"");
-                        String name = aa[1];
-                        String functions = ab[0];
-
-                        mainapp.rosterHashMap.put(locoAddress,name + "«»" + functions);
-                        mainapp.msgHistory = "<i>" + line + "</i><br/>" + mainapp.msgHistory;
-
+//                    if ( (line.length()>7) && (line.substring(0, 7).equals("ROSTER("))) {
+//                        //ROSTER( loco, name, func_map )
+//                        String locoAddressString = line.substring(7, line.indexOf(","));
+//                        int locoAddress = Integer.parseInt(locoAddressString);
+//                        String restOfLine = line.substring(line.indexOf(",")+1);
+//                        String[] a = restOfLine.split("\",\"");
+//                        String[] aa = a[0].split("\"");
+//                        String[] ab = a[1].split("\"");
+//                        String name = aa[1];
+//                        String functions = ab[0];
+//
+//                        mainapp.rosterHashMap.put(locoAddress,name + "«»" + functions);
+//                        mainapp.msgHistory = "<i>" + line + "</i><br/>" + mainapp.msgHistory;
+//
+//                    }
+                    if (line.length()>0) {
+                        String[] tokens = line.split("\\(");
+                        if (tokens.length > 1) {
+                            tokens[0] = tokens[0].trim();
+                            if (tokens[0].equals("ROSTER")) {
+                                Loco loco = new Loco(mainapp, line);
+                                mainapp.rosterHashMap.put(loco.id, loco);
+                                mainapp.msgHistory = "<i>" + line + "</i><br/>" + mainapp.msgHistory;
+                            }
+                        }
                     }
+
                 }
                 list_reader.close();
             } else {
@@ -62,24 +78,25 @@ public class ReadMyAutomationH {
         File sdcard_path = Environment.getExternalStorageDirectory();
         File downloads_dir = new File(sdcard_path, "Download");
         if (downloads_dir.isDirectory()) {
-            Log.d("EX-TestCS", "readMyAutomationH: readRoster - found Download");
+            Log.d("EX-TestCS", "readMyAutomationH: readTurnouts - found Download");
 
             File myAutomationHfile = new File(sdcard_path, "Download/myAutomation.h");
             if (myAutomationHfile.exists()) {
                 BufferedReader list_reader = new BufferedReader(new FileReader(myAutomationHfile));
                 while (list_reader.ready()) {
                     String line = list_reader.readLine();
-                    if ( (line.length()>14) && (line.substring(0, 14).equals("SERVO_TURNOUT("))) {
-                        String restOfLine = line.trim().substring(14, line.length()-1);
-                        String[] values = restOfLine.split(",");
-                        String servoIdStr = values[0];
-                        int servoId = Integer.parseInt(servoIdStr);
-                        String servoName = values[6].trim();
-                        servoName = servoName.substring(1, servoName.length()-1);
-
-                        mainapp.servoHashMap.put(servoId,servoName);
-                        mainapp.msgHistory = "<i>" + line + "</i><br/>" + mainapp.msgHistory;
-
+                    if (line.length()>0) {
+                        String[] tokens = line.split("\\(");
+                        if (tokens.length>1) {
+                            tokens[0]=tokens[0].trim();
+                            if ( (tokens[0].equals("SERVO_TURNOUT")) || (tokens[0].equals("TURNOUT"))
+                                    || (tokens[0].equals("TURNOUTL")) || (tokens[0].equals("PIN_TURNOUT"))
+                                    || (tokens[0].equals("VIRTUAL_TURNOUT")) ) {
+                                Turnout turnout = new Turnout(line);
+                                mainapp.turnoutsHashMap.put(turnout.id, turnout);
+                                mainapp.msgHistory = "<i>" + line + "</i><br/>" + mainapp.msgHistory;
+                            }
+                        }
                     }
                 }
                 list_reader.close();
